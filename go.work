@@ -1,0 +1,8 @@
+go 1.24.0
+
+use (
+	./contracts/mqtt
+	./services/edge-api
+	./simulator
+	./tests
+)

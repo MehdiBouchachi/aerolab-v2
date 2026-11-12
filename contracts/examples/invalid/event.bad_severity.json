@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "site_id": "site-sim-01",
+  "device_id": "esp32-sim-004",
+  "unit_id": "unit-sim-004",
+  "boot_id": "boot-9f3a1c22-5b",
+  "data_source": "SIMULATOR",
+  "type": "event",
+  "seq": 762,
+  "uptime_ms": 460000,
+  "sampled_at_utc": null,
+  "clock_quality": "monotonic_only",
+  "event_type": "FAULT_RAISED",
+  "severity": "fatal",
+  "code": "LOW_WATER",
+  "details": {
+    "level_ok": false
+  }
+}

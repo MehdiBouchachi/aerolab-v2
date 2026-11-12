@@ -1,0 +1,17 @@
+# secrets / local state — never commit
+.env
+.env.*
+!.env.example
+.dev/
+*.db
+*.db-wal
+*.db-shm
+*.pem
+*.key
+# build output
+/bin/
+node_modules/
+dist/
+coverage/
+*.test
+*.out

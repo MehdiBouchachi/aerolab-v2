@@ -1,0 +1,32 @@
+{
+  "title": "Presence birth / last will",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/header"
+    },
+    {
+      "type": "object",
+      "required": [
+        "status",
+        "firmware_version",
+        "session_nonce"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "ONLINE",
+            "OFFLINE"
+          ]
+        },
+        "firmware_version": {
+          "type": "string"
+        },
+        "session_nonce": {
+          "$ref": "common.schema.json#/$defs/token"
+        }
+      }
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aerolab.invalid/schemas/mqtt/v1/presence.schema.json"
+}

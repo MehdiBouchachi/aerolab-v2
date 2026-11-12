@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "site_id": "site-sim-01",
+  "device_id": "esp32-sim-004",
+  "unit_id": "unit-sim-004",
+  "boot_id": "boot-9f3a1c22-5b",
+  "data_source": "SIMULATOR",
+  "status": "ONLINE",
+  "firmware_version": "sim-0.1.0",
+  "session_nonce": "nonce-12345678"
+}

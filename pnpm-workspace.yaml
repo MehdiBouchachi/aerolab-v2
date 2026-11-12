@@ -1,0 +1,4 @@
+# TypeScript workspace skeleton (Phase 2+). No TS packages exist yet, so there is no lockfile.
+packages:
+  - "apps/*"
+  - "packages/*"

@@ -1,0 +1,140 @@
+{
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,39}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9-]{8,64}$"
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "header": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "site_id",
+        "device_id",
+        "unit_id",
+        "boot_id",
+        "data_source"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "site_id": {
+          "$ref": "#/$defs/id"
+        },
+        "device_id": {
+          "$ref": "#/$defs/id"
+        },
+        "unit_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "boot_id": {
+          "$ref": "#/$defs/token"
+        },
+        "data_source": {
+          "enum": [
+            "DEVICE",
+            "SIMULATOR"
+          ]
+        }
+      }
+    },
+    "clock": {
+      "type": "object",
+      "required": [
+        "clock_quality",
+        "sampled_at_utc"
+      ],
+      "properties": {
+        "clock_quality": {
+          "enum": [
+            "monotonic_only",
+            "rtc_synced",
+            "ntp_synced"
+          ]
+        },
+        "sampled_at_utc": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "clock_quality": {
+            "const": "monotonic_only"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "sampled_at_utc": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "sampled_at_utc": {
+            "$ref": "#/$defs/ts"
+          }
+        }
+      }
+    },
+    "program": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "on_duration_seconds",
+        "off_duration_seconds",
+        "max_continuous_on_seconds",
+        "require_reservoir_ok"
+      ],
+      "properties": {
+        "mode": {
+          "const": "TIMED_CYCLE"
+        },
+        "on_duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "off_duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "max_continuous_on_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "require_reservoir_ok": {
+          "const": true
+        }
+      }
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aerolab.invalid/schemas/mqtt/v1/common.schema.json"
+}

@@ -1,0 +1,87 @@
+{
+  "title": "Pi -> device command (never retained)",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "command_id",
+    "site_id",
+    "device_id",
+    "unit_id",
+    "command_type",
+    "session_nonce",
+    "expected_program_version",
+    "issued_at_utc",
+    "expires_at_utc",
+    "ttl_seconds"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "command_id": {
+      "$ref": "common.schema.json#/$defs/token"
+    },
+    "site_id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "device_id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "unit_id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "command_type": {
+      "enum": [
+        "APPLY_PROGRAM",
+        "QUERY_STATE"
+      ]
+    },
+    "session_nonce": {
+      "$ref": "common.schema.json#/$defs/token"
+    },
+    "expected_program_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "new_program_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "issued_at_utc": {
+      "$ref": "common.schema.json#/$defs/ts"
+    },
+    "expires_at_utc": {
+      "$ref": "common.schema.json#/$defs/ts"
+    },
+    "ttl_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300
+    },
+    "program": {
+      "$ref": "common.schema.json#/$defs/program"
+    }
+  },
+  "if": {
+    "properties": {
+      "command_type": {
+        "const": "APPLY_PROGRAM"
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "new_program_version",
+      "program"
+    ]
+  },
+  "else": {
+    "not": {
+      "required": [
+        "program"
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aerolab.invalid/schemas/mqtt/v1/command.schema.json"
+}

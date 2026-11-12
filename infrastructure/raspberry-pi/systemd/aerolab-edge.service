@@ -1,0 +1,28 @@
+# STATUS: written from the spec; NOT yet installed or measured on a Raspberry Pi.
+[Unit]
+Description=AeroLab edge service (local API, MQTT ingest, SQLite)
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+User=aerolab
+Group=aerolab
+EnvironmentFile=/etc/aerolab/edge.env
+ExecStart=/opt/aerolab/bin/aerolab-edge serve
+Restart=on-failure
+RestartSec=3s
+# Resource budget (spec 15.2). MemoryHigh = reclaim pressure, MemoryMax = hard kill.
+MemoryHigh=192M
+MemoryMax=256M
+CPUQuota=100%
+# Hardening that does not break SQLite persistence
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/aerolab
+StateDirectory=aerolab
+StateDirectoryMode=0750
+
+[Install]
+WantedBy=multi-user.target

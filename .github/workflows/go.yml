@@ -1,0 +1,28 @@
+# Written alongside the code; the same commands were run locally (see docs/development/status.md).
+# This workflow itself has NOT been executed on GitHub yet.
+name: go
+on:
+  push: { branches: ["**"] }
+  pull_request:
+permissions: { contents: read }
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.work, cache-dependency-path: "**/go.sum" }
+      - name: install Mosquitto (real broker for integration tests)
+        run: sudo apt-get update && sudo apt-get install -y mosquitto && sudo systemctl disable --now mosquitto
+      - run: make lint
+      - run: make test-race
+      - run: make test-integration
+  arm64-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.work }
+      - run: make pi-arm64
+      - uses: actions/upload-artifact@v4
+        with: { name: edge-linux-arm64, path: bin/edge-linux-arm64 }

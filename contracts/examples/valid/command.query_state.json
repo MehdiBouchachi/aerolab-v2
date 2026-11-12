@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "command_id": "cmd-7c1e9a40-0001",
+  "site_id": "site-sim-01",
+  "device_id": "esp32-sim-004",
+  "unit_id": "unit-sim-004",
+  "command_type": "QUERY_STATE",
+  "session_nonce": "nonce-12345678",
+  "expected_program_version": 6,
+  "issued_at_utc": "2026-11-12T13:00:00Z",
+  "expires_at_utc": "2026-11-12T13:02:00Z",
+  "ttl_seconds": 120
+}

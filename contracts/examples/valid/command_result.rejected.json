@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "command_id": "cmd-7c1e9a40-0001",
+  "site_id": "site-sim-01",
+  "device_id": "esp32-sim-004",
+  "boot_id": "boot-9f3a1c22-5b",
+  "data_source": "SIMULATOR",
+  "status": "REJECTED",
+  "current_program_version": 6,
+  "reason_code": "VERSION_CONFLICT"
+}

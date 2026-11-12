@@ -1,0 +1,84 @@
+{
+  "title": "Device -> Pi command result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "command_id",
+    "site_id",
+    "device_id",
+    "boot_id",
+    "data_source",
+    "status",
+    "current_program_version",
+    "reason_code"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "command_id": {
+      "$ref": "common.schema.json#/$defs/token"
+    },
+    "site_id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "device_id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "boot_id": {
+      "$ref": "common.schema.json#/$defs/token"
+    },
+    "data_source": {
+      "enum": [
+        "DEVICE",
+        "SIMULATOR"
+      ]
+    },
+    "status": {
+      "enum": [
+        "APPLIED",
+        "REJECTED",
+        "ALREADY_PROCESSED",
+        "UNKNOWN"
+      ]
+    },
+    "original_status": {
+      "enum": [
+        "APPLIED",
+        "REJECTED",
+        "ALREADY_PROCESSED",
+        "UNKNOWN"
+      ]
+    },
+    "current_program_version": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "reason_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "if": {
+    "properties": {
+      "status": {
+        "const": "REJECTED"
+      }
+    }
+  },
+  "then": {
+    "properties": {
+      "reason_code": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aerolab.invalid/schemas/mqtt/v1/command-result.schema.json"
+}

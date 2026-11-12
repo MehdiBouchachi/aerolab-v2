@@ -1,0 +1,70 @@
+{
+  "title": "Pi -> device durable receipt",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "site_id",
+    "device_id",
+    "boot_id",
+    "receipt_id",
+    "status",
+    "acked_sequences",
+    "rejected_sequences"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "site_id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "device_id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "boot_id": {
+      "$ref": "common.schema.json#/$defs/token"
+    },
+    "receipt_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 64
+    },
+    "status": {
+      "const": "PERSISTED"
+    },
+    "acked_sequences": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "rejected_sequences": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    }
+  },
+  "anyOf": [
+    {
+      "properties": {
+        "acked_sequences": {
+          "minItems": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "rejected_sequences": {
+          "minItems": 1
+        }
+      }
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aerolab.invalid/schemas/mqtt/v1/receipt.schema.json"
+}

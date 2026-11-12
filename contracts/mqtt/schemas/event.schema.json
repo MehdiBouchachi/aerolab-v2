@@ -1,0 +1,64 @@
+{
+  "title": "Device event (durable, sequenced)",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/header"
+    },
+    {
+      "$ref": "common.schema.json#/$defs/clock"
+    },
+    {
+      "type": "object",
+      "required": [
+        "type",
+        "seq",
+        "uptime_ms",
+        "event_type",
+        "severity",
+        "code"
+      ],
+      "properties": {
+        "type": {
+          "const": "event"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4503599627370496
+        },
+        "uptime_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "event_type": {
+          "enum": [
+            "FAULT_RAISED",
+            "FAULT_CLEARED",
+            "STATE_CHANGE",
+            "PROGRAM_APPLIED",
+            "BOOT",
+            "BUFFER_OVERFLOW",
+            "RECOVERY_CONFIRMED"
+          ]
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "critical"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{1,39}$"
+        },
+        "details": {
+          "type": "object",
+          "maxProperties": 16
+        }
+      }
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aerolab.invalid/schemas/mqtt/v1/event.schema.json"
+}

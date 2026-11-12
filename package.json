@@ -1,0 +1,12 @@
+{
+  "name": "aerolab-v2",
+  "private": true,
+  "description": "AeroLab V2 monorepo. Go services/simulator are driven by the Makefile; TypeScript apps arrive in Phase 2/5.",
+  "scripts": {
+    "dev:stack": "make dev-stack",
+    "test": "make test",
+    "test:integration": "make test-integration",
+    "lint": "make lint"
+  },
+  "engines": { "node": ">=20" }
+}

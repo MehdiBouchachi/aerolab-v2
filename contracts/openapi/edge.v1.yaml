@@ -1,0 +1,133 @@
+openapi: 3.0.3
+info:
+  title: AeroLab Edge API (Raspberry Pi)
+  version: 1.0.0-phase1
+  description: |
+    Local, offline-capable API served by the Pi. Paths marked `x-surface: shared`
+    are intended to exist with the same shape on the cloud API (Phase 4);
+    `edge-only` paths never exist in the cloud. Every protected operation is
+    authorised server-side by role; `x-min-role` documents the matrix.
+servers: [{ url: / }]
+security: [{ bearer: [] }, { cookie: [] }]
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
+    cookie: { type: apiKey, in: cookie, name: aerolab_session }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum: [UNAUTHORIZED, FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DEVICE_OFFLINE, STALE_DATA, PROGRAM_VERSION_CONFLICT, COMMAND_PENDING, COMMAND_EXPIRED, IDEMPOTENCY_CONFLICT, STORAGE_UNAVAILABLE, SITE_NOT_REACHABLE, RATE_LIMITED, INTERNAL_ERROR]
+            message: { type: string }
+            details: { type: object }
+            request_id: { type: string }
+    Program:
+      type: object
+      required: [mode, on_duration_seconds, off_duration_seconds, max_continuous_on_seconds, require_reservoir_ok]
+      additionalProperties: false
+      properties:
+        mode: { type: string, enum: [TIMED_CYCLE] }
+        on_duration_seconds: { type: integer, minimum: 1, maximum: 3600 }
+        off_duration_seconds: { type: integer, minimum: 1, maximum: 86400 }
+        max_continuous_on_seconds: { type: integer, minimum: 1, maximum: 3600 }
+        require_reservoir_ok: { type: boolean, enum: [true], description: Protection cannot be disabled. }
+    ProgramRequest:
+      type: object
+      required: [expected_program_version, program]
+      additionalProperties: false
+      properties:
+        command_id: { type: string, description: Idempotency key; also accepted as the Idempotency-Key header. }
+        expected_program_version: { type: integer, minimum: 0 }
+        program: { $ref: '#/components/schemas/Program' }
+    Command:
+      type: object
+      description: >
+        status PENDING/SENT mean NOT applied. APPLIED is only ever set after the
+        ESP32 confirmed (applied_confirmed=true).
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [PENDING, SENT, APPLIED, REJECTED, CONFLICT, EXPIRED, UNKNOWN] }
+        applied_confirmed: { type: boolean }
+        note: { type: string }
+    Unit: { type: object }
+    Incident: { type: object }
+paths:
+  /healthz:
+    get: { x-surface: shared, security: [], summary: Liveness, responses: { '200': { description: ok } } }
+  /readyz:
+    get: { x-surface: edge-only, security: [], summary: Readiness (booleans only), responses: { '200': { description: ready }, '503': { description: database unavailable } } }
+  /api/v1/local/auth/login:
+    post: { x-surface: edge-only, security: [], summary: Local login, responses: { '200': { description: session }, '401': { description: bad credentials }, '429': { description: rate limited } } }
+  /api/v1/local/auth/logout:
+    post: { x-surface: edge-only, summary: Revoke the session, responses: { '204': { description: ok } } }
+  /api/v1/session:
+    get: { x-surface: shared, summary: Current user, source, capabilities, responses: { '200': { description: ok } } }
+  /api/v1/local/users:
+    get: { x-surface: edge-only, x-min-role: ADMIN, summary: List local users, responses: { '200': { description: ok }, '403': { description: forbidden } } }
+    post: { x-surface: edge-only, x-min-role: ADMIN, summary: Create local user, responses: { '201': { description: created }, '403': { description: forbidden } } }
+  /api/v1/local/users/{userId}:
+    patch: { x-surface: edge-only, x-min-role: ADMIN, summary: Change role / disable (last admin protected), responses: { '200': { description: ok }, '409': { description: last admin } } }
+  /api/v1/sites:
+    get: { x-surface: shared, x-min-role: VIEWER, summary: Sites visible to the user, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/summary:
+    get: { x-surface: shared, x-min-role: VIEWER, summary: Counts, connectivity (separate facts), incidents, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/units:
+    get: { x-surface: shared, x-min-role: VIEWER, summary: Paged units with connection/controller state, responses: { '200': { description: ok } } }
+  /api/v1/units/{unitId}:
+    get: { x-surface: shared, x-min-role: VIEWER, summary: Unit detail, responses: { '200': { description: ok }, '404': { description: unknown unit } } }
+  /api/v1/units/{unitId}/readings/latest:
+    get: { x-surface: shared, x-min-role: VIEWER, summary: Latest snapshot with quality + age, responses: { '200': { description: ok } } }
+  /api/v1/units/{unitId}/readings/history:
+    get:
+      x-surface: shared
+      x-min-role: VIEWER
+      summary: Bounded history (max 31 days, max 5000 points) with explicit gaps
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: resolution, in: query, schema: { type: string, enum: [raw, 1m, 5m, 15m, 1h] } }
+      responses: { '200': { description: ok }, '400': { description: range/resolution out of bounds } }
+  /api/v1/units/{unitId}/programs/applied:
+    get: { x-surface: shared, x-min-role: VIEWER, summary: Programme confirmed by the controller, responses: { '200': { description: ok } } }
+  /api/v1/units/{unitId}/programs:
+    get: { x-surface: shared, x-min-role: VIEWER, summary: Revision list, responses: { '200': { description: ok } } }
+  /api/v1/units/{unitId}/program-requests:
+    post:
+      x-surface: edge-only
+      x-min-role: ADMIN
+      summary: Request a programme change (optimistic concurrency; returns PENDING/SENT, never APPLIED)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProgramRequest' } } } }
+      responses:
+        '202': { description: accepted for delivery; not applied }
+        '200': { description: idempotent replay }
+        '409': { description: PROGRAM_VERSION_CONFLICT / DEVICE_OFFLINE / COMMAND_PENDING / IDEMPOTENCY_CONFLICT }
+  /api/v1/commands/{commandId}:
+    get: { x-surface: shared, x-min-role: VIEWER, summary: Command state, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/incidents:
+    get: { x-surface: shared, x-min-role: VIEWER, summary: Incidents (state=active|resolved|all), responses: { '200': { description: ok } } }
+  /api/v1/incidents/{incidentId}:
+    get: { x-surface: shared, x-min-role: VIEWER, summary: Incident detail, responses: { '200': { description: ok } } }
+  /api/v1/incidents/{incidentId}/acknowledge:
+    post: { x-surface: edge-only, x-min-role: OPERATOR, summary: Acknowledge (does not resolve), responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/events:
+    get:
+      x-surface: shared
+      x-min-role: VIEWER
+      summary: SSE stream (unit.state, unit.reading, incident.updated, program.updated, site.connectivity)
+      responses: { '200': { description: text/event-stream } }
+  /api/v1/sites/{siteId}/devices:
+    get: { x-surface: edge-only, x-min-role: ADMIN, summary: Registered devices, responses: { '200': { description: ok } } }
+    post: { x-surface: edge-only, x-min-role: ADMIN, summary: Register a device + unit (no secrets handled), responses: { '201': { description: created } } }
+  /api/v1/sites/{siteId}/storage:
+    get: { x-surface: edge-only, x-min-role: VIEWER, summary: Capacity, retention, sync, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/audit:
+    get: { x-surface: edge-only, x-min-role: ADMIN, summary: Audit log, responses: { '200': { description: ok } } }
+  /api/v1/diagnostics:
+    get: { x-surface: edge-only, x-min-role: ADMIN, summary: Process + ingest counters, responses: { '200': { description: ok } } }

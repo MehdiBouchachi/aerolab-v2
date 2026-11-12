@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "command_id": "cmd-7c1e9a40-0001",
+  "site_id": "site-sim-01",
+  "device_id": "esp32-sim-004",
+  "unit_id": "unit-sim-004",
+  "command_type": "APPLY_PROGRAM",
+  "session_nonce": "nonce-12345678",
+  "expected_program_version": 6,
+  "new_program_version": 7,
+  "issued_at_utc": "2026-11-12T13:00:00Z",
+  "expires_at_utc": "2026-11-12T13:02:00Z",
+  "ttl_seconds": 120,
+  "program": {
+    "mode": "TIMED_CYCLE",
+    "on_duration_seconds": 10,
+    "off_duration_seconds": 290,
+    "max_continuous_on_seconds": 5,
+    "require_reservoir_ok": true
+  }
+}

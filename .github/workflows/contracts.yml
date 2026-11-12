@@ -1,0 +1,16 @@
+name: contracts
+on:
+  push: { paths: ["contracts/**"] }
+  pull_request: { paths: ["contracts/**", "services/edge-api/internal/httpapi/**"] }
+permissions: { contents: read }
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.work }
+      - name: MQTT schema <-> Go validator agreement on every fixture
+        run: cd contracts/mqtt && go test -count=1 ./...
+      - name: OpenAPI <-> router parity
+        run: cd services/edge-api && go test -count=1 -run TestRoutesMatchOpenAPIExactly ./internal/httpapi/

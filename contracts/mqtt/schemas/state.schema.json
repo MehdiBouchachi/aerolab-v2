@@ -1,0 +1,128 @@
+{
+  "title": "Device state heartbeat (ephemeral, every 5 s)",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/header"
+    },
+    {
+      "type": "object",
+      "required": [
+        "uptime_ms",
+        "control_state",
+        "pump_commanded",
+        "water_delivery",
+        "program_version_applied",
+        "last_command_id",
+        "essential_interlocks_ok",
+        "fault_codes",
+        "free_heap_bytes",
+        "wifi_rssi_dbm",
+        "firmware_version",
+        "session_nonce",
+        "buffer"
+      ],
+      "properties": {
+        "uptime_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "control_state": {
+          "enum": [
+            "BOOT_SAFE",
+            "SELF_CHECK",
+            "NEEDS_SETUP",
+            "RUNNING",
+            "DEGRADED",
+            "PROTECTED_STOP"
+          ]
+        },
+        "pump_commanded": {
+          "enum": [
+            "ON",
+            "OFF"
+          ]
+        },
+        "water_delivery": {
+          "enum": [
+            "NOT_VERIFIED",
+            "CONFIRMED",
+            "NOT_FLOWING"
+          ]
+        },
+        "program_version_applied": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "last_command_id": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/token"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "essential_interlocks_ok": {
+          "type": "boolean"
+        },
+        "fault_codes": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{1,39}$"
+          }
+        },
+        "free_heap_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wifi_rssi_dbm": {
+          "type": "integer",
+          "minimum": -127,
+          "maximum": 0
+        },
+        "firmware_version": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._+-]{1,32}$"
+        },
+        "session_nonce": {
+          "$ref": "common.schema.json#/$defs/token"
+        },
+        "buffer": {
+          "type": "object",
+          "required": [
+            "occupancy",
+            "capacity",
+            "unreceipted",
+            "overflow_count"
+          ],
+          "properties": {
+            "occupancy": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "capacity": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unreceipted": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "overflow_count": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aerolab.invalid/schemas/mqtt/v1/state.schema.json"
+}

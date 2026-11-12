@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "site_id": "site-sim-01",
+  "device_id": "esp32-sim-004",
+  "boot_id": "boot-9f3a1c22-5b",
+  "receipt_id": "receipt-0001-abcd",
+  "status": "RECEIVED",
+  "acked_sequences": [
+    761,
+    762,
+    763
+  ],
+  "rejected_sequences": []
+}

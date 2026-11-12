@@ -1,0 +1,117 @@
+{
+  "title": "Telemetry snapshot (durable, sequenced)",
+  "allOf": [
+    {
+      "$ref": "common.schema.json#/$defs/header"
+    },
+    {
+      "$ref": "common.schema.json#/$defs/clock"
+    },
+    {
+      "type": "object",
+      "required": [
+        "type",
+        "seq",
+        "uptime_ms",
+        "program_version_applied",
+        "readings"
+      ],
+      "properties": {
+        "type": {
+          "const": "telemetry"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4503599627370496
+        },
+        "uptime_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "program_version_applied": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "readings": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 32,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,39}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "value",
+              "quality"
+            ],
+            "properties": {
+              "value": {
+                "type": [
+                  "number",
+                  "boolean",
+                  "null"
+                ]
+              },
+              "quality": {
+                "enum": [
+                  "valid",
+                  "invalid",
+                  "missing",
+                  "outdated"
+                ]
+              },
+              "unit": {
+                "type": "string",
+                "maxLength": 16
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "quality": {
+                      "const": "valid"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "value": {
+                      "type": [
+                        "number",
+                        "boolean"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "quality": {
+                      "const": "missing"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "value": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aerolab.invalid/schemas/mqtt/v1/telemetry.schema.json"
+}

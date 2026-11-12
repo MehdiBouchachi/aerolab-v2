@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "site_id": "site-sim-01",
+  "device_id": "ESP32/../x",
+  "unit_id": "unit-sim-004",
+  "boot_id": "boot-9f3a1c22-5b",
+  "data_source": "SIMULATOR",
+  "type": "telemetry",
+  "seq": 761,
+  "uptime_ms": 457000,
+  "sampled_at_utc": null,
+  "clock_quality": "monotonic_only",
+  "program_version_applied": 6,
+  "readings": {
+    "air_temp_c": {
+      "value": 24.1,
+      "quality": "valid",
+      "unit": "C"
+    },
+    "relative_humidity_pct": {
+      "value": 58.0,
+      "quality": "valid",
+      "unit": "%"
+    },
+    "water_temp_c": {
+      "value": 22.5,
+      "quality": "valid",
+      "unit": "C"
+    },
+    "ph": {
+      "value": null,
+      "quality": "invalid"
+    },
+    "ec_ms_cm": {
+      "value": 1.7,
+      "quality": "valid",
+      "unit": "mS/cm"
+    },
+    "reservoir_level_ok": {
+      "value": true,
+      "quality": "valid"
+    },
+    "light_lux": {
+      "value": null,
+      "quality": "missing"
+    }
+  }
+}
