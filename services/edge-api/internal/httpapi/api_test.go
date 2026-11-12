@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -458,5 +459,62 @@ func TestUnknownRoutesAndWrongSite(t *testing.T) {
 	// unknown non-API paths fall back to the SPA shell (works offline)
 	if w := e.do("GET", "/units/unit-test-001", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), "AeroLab") {
 		t.Fatalf("SPA fallback: %d", w.Code)
+	}
+}
+
+func TestSSEStreamRequiresAuthAndDeliversTypedEvents(t *testing.T) {
+	e := newEnv(t)
+	srv := httptest.NewServer(e.h)
+	defer srv.Close()
+
+	// unauthenticated and wrong-site streams are refused
+	resp, _ := http.Get(srv.URL + "/api/v1/sites/site-test-01/events")
+	if resp.StatusCode != 401 {
+		t.Fatalf("anonymous stream: %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	req, _ := http.NewRequest("GET", srv.URL+"/api/v1/sites/site-test-01/events", nil)
+	req.Header.Set("Authorization", "Bearer "+e.toks[roles.Viewer])
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("content-type %q", ct)
+	}
+	lines := make(chan string, 64)
+	go func() {
+		sc := bufio.NewScanner(resp.Body)
+		for sc.Scan() {
+			lines <- sc.Text()
+		}
+		close(lines)
+	}()
+	wait := func(prefix string) string {
+		for {
+			select {
+			case l, ok := <-lines:
+				if !ok {
+					t.Fatalf("stream closed before %q", prefix)
+				}
+				if strings.HasPrefix(l, prefix) {
+					return l
+				}
+			case <-ctx.Done():
+				t.Fatalf("timeout waiting for %q", prefix)
+			}
+		}
+	}
+	wait("event: hello") // client is told to re-fetch a snapshot: no replay
+	e.srv.Hub.Publish("incident.updated", map[string]string{"id": "x"})
+	if l := wait("event: incident.updated"); l == "" {
+		t.Fatal("no typed event")
+	}
+	if d := wait("data: "); !strings.Contains(d, `"id":"x"`) {
+		t.Fatalf("payload %q", d)
 	}
 }

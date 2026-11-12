@@ -28,6 +28,7 @@ type netLink struct {
 	connected bool
 	nonce     string
 	lost      chan struct{}
+	trigger   func() // closes `lost` exactly once (paho may be slow to notice a dead socket)
 	rng       *rand.Rand
 }
 
@@ -43,10 +44,13 @@ func (n *netLink) isConnected() bool { n.mu.Lock(); defer n.mu.Unlock(); return 
 // way a Wi-Fi loss looks to the broker, so the Last Will is published.
 func (n *netLink) dropConnection() {
 	n.mu.Lock()
-	c := n.conn
+	c, trig := n.conn, n.trigger
 	n.mu.Unlock()
 	if c != nil {
 		_ = c.Close()
+	}
+	if trig != nil {
+		trig() // do not wait for the MQTT keep-alive to discover the loss
 	}
 }
 
@@ -116,7 +120,8 @@ func (n *netLink) connectOnce() error {
 	opts.SetWill(mc.DeviceTopic(d.cfg.DeviceID, mc.TopicPresence), string(n.presence(mc.PresenceOffline, nonce)), 1, true)
 	lost := make(chan struct{})
 	var once sync.Once
-	opts.SetConnectionLostHandler(func(paho.Client, error) { once.Do(func() { close(lost) }) })
+	trigger := func() { once.Do(func() { close(lost) }) }
+	opts.SetConnectionLostHandler(func(paho.Client, error) { trigger() })
 	opts.SetCustomOpenConnectionFn(func(uri *url.URL, o paho.ClientOptions) (net.Conn, error) {
 		c, err := net.DialTimeout("tcp", uri.Host, o.ConnectTimeout)
 		if err == nil {
@@ -150,7 +155,7 @@ func (n *netLink) connectOnce() error {
 		return context.DeadlineExceeded
 	}
 	n.mu.Lock()
-	n.client, n.connected, n.nonce, n.lost = cl, true, nonce, lost
+	n.client, n.connected, n.nonce, n.lost, n.trigger = cl, true, nonce, lost, trigger
 	n.mu.Unlock()
 	n.reconnects.Add(1)
 	// Reconnect order from the spec: presence + state FIRST, then backlog.
@@ -165,6 +170,7 @@ func (n *netLink) teardown(graceful bool) {
 	n.connected = false
 	n.client = nil
 	n.conn = nil
+	n.trigger = nil
 	n.mu.Unlock()
 	if cl == nil {
 		return
