@@ -5,7 +5,7 @@ DEVICES ?= 10
 BROKER_PORT ?= 18830
 HTTP_ADDR ?= 127.0.0.1:18080
 
-.PHONY: web-build-cloud web-build web-test help build test test-race test-integration load lint dev-provision dev-stack dev-stop clean pi-arm64
+.PHONY: fw-test web-build-cloud web-build web-test help build test test-race test-integration load lint dev-provision dev-stack dev-stop clean pi-arm64
 
 help:
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s $$'\t'
@@ -18,6 +18,10 @@ build: ## build edge + simulator binaries into ./bin
 
 web-build: ## build the dashboard into apps/web/dist (served by the edge)
 	cd apps/web && pnpm install --frozen-lockfile=false && pnpm build
+
+fw-test: ## portable firmware core on the host (gcc + ASan/UBSan) + Go validates its output
+	cd firmware/esp32/test/host && make test
+	cd tests && go test -count=1 -run TestFirmwareEncoded .
 
 web-build-cloud: ## build the dashboard for the CLOUD origin into apps/web/dist-cloud
 	cd apps/web && pnpm install --frozen-lockfile=false && VITE_SOURCE=cloud pnpm build --outDir dist-cloud

@@ -1,0 +1,14 @@
+menu "AeroLab"
+    config AEROLAB_WIRING_VERIFIED
+        bool "I have verified pins, polarity and the pump ON limit on the real rig (water-only test done)"
+        default n
+        help
+          Until this is enabled AND components/board_profile has real pins and a hard pump-ON cap,
+          the actuator layer refuses to energise any output and the level input fails safe.
+    config AEROLAB_FIRMWARE_VERSION
+        string "Firmware version string reported to the Pi"
+        default "fw-0.1.0"
+    config AEROLAB_SIMULATED_DATA
+        bool "Mark this build's data_source as SIMULATOR (bench rigs without real sensors)"
+        default n
+endmenu

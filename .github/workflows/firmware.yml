@@ -1,0 +1,22 @@
+# The host job runs the same commands as `make fw-test`. The ESP-IDF build job has NEVER been run:
+# it is here so the first person with Actions enabled finds out whether the glue code compiles.
+name: firmware
+on:
+  push: { paths: ["firmware/**", "contracts/**"] }
+  pull_request: { paths: ["firmware/**", "contracts/**"] }
+permissions: { contents: read }
+jobs:
+  host-core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.work }
+      - run: make fw-test
+  idf-build:
+    runs-on: ubuntu-24.04
+    continue-on-error: true   # unverified glue: informational until it has built once
+    container: espressif/idf:v5.3
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd firmware/esp32 && . $IDF_PATH/export.sh && idf.py set-target esp32 && idf.py build

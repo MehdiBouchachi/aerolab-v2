@@ -16,3 +16,4 @@ coverage/
 *.test
 *.out
 apps/web/dist-cloud/
+firmware/esp32/test/host/build/
