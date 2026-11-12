@@ -44,6 +44,7 @@ make test-race          # same with the race detector
 make test-integration   # real Mosquitto + real edge binary (SIGKILL-able) + simulated fleet (~1 min)
 make web-build         # build the dashboard (needs pnpm)
 make dev-stack          # 10 SIMULATED controllers + broker + edge + dashboard at http://127.0.0.1:18080/ ; Ctrl-C to stop
+docker compose up --build   # ONE command, no toolchain needed: same demo in Docker at http://localhost:8080 (see infrastructure/development/README.md)
 ```
 
 `make dev-stack` prints the API URL and where the random dev admin password lives (`.dev/edge.env`,

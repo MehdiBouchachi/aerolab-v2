@@ -1,0 +1,41 @@
+# One command:   docker compose up --build        ->  http://localhost:8080
+# Cloud too:     docker compose --profile cloud up --build   ->  cloud http://localhost:8090
+# Everything the demo shows is SIMULATED (data_source=SIMULATOR). Secrets are generated at first
+# start into the "aerolab-data" volume, never into the image or Git.
+services:
+  aerolab:
+    build: { context: ., target: stack }
+    ports: ["${AEROLAB_PORT:-8080}:8080"]
+    environment:
+      DEVICES: "${DEVICES:-10}"
+      AEROLAB_PUBLISHED_PORT: "${AEROLAB_PORT:-8080}"
+    volumes: ["aerolab-data:/data"]
+    mem_limit: 320m
+    restart: unless-stopped
+
+  postgres:
+    profiles: [cloud]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aerolab
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-aerolab-dev-only}"
+      POSTGRES_DB: aerolab
+    volumes: ["aerolab-pg:/var/lib/postgresql/data"]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U aerolab"], interval: 5s, retries: 10 }
+
+  cloud:
+    profiles: [cloud]
+    build: { context: ., target: cloud }
+    depends_on: { postgres: { condition: service_healthy } }
+    ports: ["${AEROLAB_CLOUD_PORT:-8090}:8090"]
+    environment:
+      AEROLAB_CLOUD_DATABASE_URL: "postgres://aerolab:${POSTGRES_PASSWORD:-aerolab-dev-only}@postgres:5432/aerolab?sslmode=disable"
+      AEROLAB_CLOUD_COOKIE_SECURE: "false"   # plain HTTP on localhost only; keep "true" behind TLS
+      AEROLAB_CLOUD_ADMIN_EMAIL: "${AEROLAB_CLOUD_ADMIN_EMAIL:-admin@example.com}"
+      AEROLAB_NEW_PASSWORD: "${AEROLAB_CLOUD_ADMIN_PASSWORD:-change-me-please-12}"
+      AEROLAB_CLOUD_SITE_ID: "${AEROLAB_CLOUD_SITE_ID:-site-demo-01}"
+    restart: unless-stopped
+
+volumes:
+  aerolab-data:
+  aerolab-pg:

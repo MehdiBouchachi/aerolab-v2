@@ -5,7 +5,7 @@ DEVICES ?= 10
 BROKER_PORT ?= 18830
 HTTP_ADDR ?= 127.0.0.1:18080
 
-.PHONY: fw-test web-build-cloud web-build web-test help build test test-race test-integration load lint dev-provision dev-stack dev-stop clean pi-arm64
+.PHONY: docker-up fw-test web-build-cloud web-build web-test help build test test-race test-integration load lint dev-provision dev-stack dev-stop clean pi-arm64
 
 help:
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s $$'\t'
@@ -67,3 +67,6 @@ dev-stop: ## stop leftovers of dev-stack
 
 clean:
 	rm -rf bin .dev
+
+docker-up: ## everything in Docker: demo site (http://localhost:8080); add PROFILE=cloud for the cloud too
+	docker compose $(if $(PROFILE),--profile $(PROFILE)) up --build

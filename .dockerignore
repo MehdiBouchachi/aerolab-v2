@@ -1,0 +1,11 @@
+.git
+.dev
+.vscode
+bin
+**/node_modules
+**/dist
+**/dist-cloud
+**/*.db*
+.env
+.env.*
+firmware/esp32/test/host/build
