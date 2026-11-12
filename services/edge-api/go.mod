@@ -25,3 +25,7 @@ require (
 )
 
 replace github.com/mehdibouchachi/aerolab-v2/contracts/mqtt => ../../contracts/mqtt
+
+require github.com/mehdibouchachi/aerolab-v2/contracts/sync v0.0.0
+
+replace github.com/mehdibouchachi/aerolab-v2/contracts/sync => ../../contracts/sync

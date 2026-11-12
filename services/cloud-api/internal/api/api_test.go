@@ -21,6 +21,7 @@ import (
 	"github.com/mehdibouchachi/aerolab-v2/services/cloud-api/internal/db"
 	"github.com/mehdibouchachi/aerolab-v2/services/cloud-api/internal/testpg"
 	"github.com/mehdibouchachi/aerolab-v2/services/cloud-api/migrations"
+	"gopkg.in/yaml.v3"
 )
 
 func TestMain(m *testing.M) {
@@ -637,6 +638,40 @@ func TestSessionShapeForSharedWebApp(t *testing.T) {
 	for _, c := range s.Caps {
 		if c == "edit_program" {
 			t.Fatal("operator granted edit_program")
+		}
+	}
+}
+
+func TestRoutesMatchOpenAPIExactly(t *testing.T) {
+	raw, err := os.ReadFile("../../../../contracts/openapi/cloud.v1.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths map[string]map[string]any `yaml:"paths"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	spec := map[string]bool{}
+	for p, ops := range doc.Paths {
+		for m := range ops {
+			spec[strings.ToUpper(m)+" "+p] = true
+		}
+	}
+	s := New(&config.Config{}, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	code := map[string]bool{}
+	for _, r := range s.Routes() {
+		code[r] = true
+	}
+	for r := range code {
+		if !spec[r] {
+			t.Errorf("implemented but undocumented: %s", r)
+		}
+	}
+	for r := range spec {
+		if !code[r] {
+			t.Errorf("documented but not implemented: %s", r)
 		}
 	}
 }

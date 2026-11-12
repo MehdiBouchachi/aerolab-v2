@@ -9,7 +9,9 @@ import { Admin } from './pages/Admin'
 
 function Gate() {
   const { session } = useApp()
+  const { signOut } = useApp()
   if (!session) return <Login />
+  if (!session.site) return <div className="login"><div className="panel"><h1>No sites</h1><p>This account is not a member of any site yet. Ask a site administrator to add you.</p><button onClick={() => void signOut()}>Sign out</button></div></div>
   return (
     <Routes>
       <Route element={<Shell />}>

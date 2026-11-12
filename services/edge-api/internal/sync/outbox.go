@@ -8,6 +8,12 @@ package sync
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"strings"
+	"time"
+
+	sc "github.com/mehdibouchachi/aerolab-v2/contracts/sync"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/incidents"
 )
 
 // MaxRows bounds the outbox. When exceeded, the lowest-priority (P3
@@ -29,4 +35,26 @@ func Trim(ctx context.Context, w *sql.DB) (dropped int64, err error) {
 	}
 	dropped, _ = res.RowsAffected()
 	return
+}
+
+// EnqueueIncident records an incident lifecycle change in the transactional
+// outbox (same SQLite transaction as the change itself). The update carries the
+// edge time of the change so the cloud can order updates and never re-open a
+// resolved incident from a late upload.
+func EnqueueIncident(ctx context.Context, tx *sql.Tx, siteID string, inc incidents.Incident) error {
+	changed := time.Now().UTC().Format(time.RFC3339Nano)
+	u := sc.IncidentUpdate{ID: inc.ID, UnitID: inc.UnitID, Severity: string(inc.Severity), Code: inc.Code, Status: inc.Status, Title: inc.Title, Cause: inc.Cause,
+		SuggestedAction: inc.SuggestedAction, FirstSeenAt: inc.FirstSeenAt, LastSeenAt: inc.LastSeenAt, Occurrences: inc.Occurrences,
+		AcknowledgedBy: inc.AcknowledgedBy, AcknowledgedAt: inc.AcknowledgedAt, ResolvedAt: inc.ResolvedAt, ChangedAt: changed}
+	b, err := json.Marshal(u)
+	if err != nil {
+		return err
+	}
+	pri := sc.P1
+	if inc.Severity == "critical" && strings.HasPrefix(inc.Status, "ACTIVE") {
+		pri = sc.P0
+	}
+	_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO outbox(event_id,event_type,priority,site_id,payload_json,created_at) VALUES (?,?,?,?,?,?)`,
+		"inc/"+inc.ID+"/"+inc.Status+"/"+changed, sc.EventIncident, pri, siteID, string(b), changed)
+	return err
 }

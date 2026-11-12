@@ -14,6 +14,7 @@ import (
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/incidents"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sse"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/storage"
+	edgesync "github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sync"
 )
 
 // Ingest turns raw MQTT messages into validated, authorised work. It runs on
@@ -28,6 +29,7 @@ type Ingest struct {
 	hub        *sse.Hub
 	m          *diagnostics.Metrics
 	log        *slog.Logger
+	SyncOutbox bool // enqueue incident changes for the cloud (set when cloud sync is enabled)
 }
 
 func NewIngest(siteID string, allowSim bool, staleAfter time.Duration, reg *devices.Registry, w *Writer, cmds *commands.Manager, hub *sse.Hub, m *diagnostics.Metrics, log *slog.Logger) *Ingest {
@@ -218,6 +220,9 @@ func (i *Ingest) handleState(dev string, payload []byte, now time.Time) {
 				return nil, err
 			}
 			changes = append(changes, cs...)
+			if err := i.enqueue(ctx, tx, changes); err != nil {
+				return nil, err
+			}
 			return func() {
 				for _, c := range changes {
 					i.hub.Publish("incident.updated", c.Incident)
@@ -297,11 +302,26 @@ func (i *Ingest) Watchdog(ctx context.Context) {
 					if err != nil || c == nil {
 						return nil, err
 					}
+					if err := i.enqueue(ctx, tx, []incidents.Change{*c}); err != nil {
+						return nil, err
+					}
 					return func() { i.hub.Publish("incident.updated", c.Incident) }, nil
 				}})
 			}
 		}
 	}
+}
+
+func (i *Ingest) enqueue(ctx context.Context, tx *sql.Tx, changes []incidents.Change) error {
+	if !i.SyncOutbox {
+		return nil
+	}
+	for _, c := range changes {
+		if err := edgesync.EnqueueIncident(ctx, tx, i.siteID, c.Incident); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func codeOf(err error) string {

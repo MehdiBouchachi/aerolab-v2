@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import { useApp } from './context'
+import { IS_CLOUD } from '../api/paths'
 
 export interface Fetched<T> { data: T | null; error: ApiError | null; loading: boolean; fetchedAt: number | null; reload: () => void }
 
@@ -9,7 +10,7 @@ export interface Fetched<T> { data: T | null; error: ApiError | null; loading: b
  * (debounced), when the stream (re)connects, and on a slow safety interval.
  * Errors keep the last good data visible and flagged - never silently blank.
  */
-export function useFetch<T>(path: string | null, eventTypes: string[] = [], pollMs = 30000): Fetched<T> {
+export function useFetch<T>(path: string | null, eventTypes: string[] = [], pollMs = IS_CLOUD ? 10000 : 30000): Fetched<T> {
   const { subscribe } = useApp()
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<ApiError | null>(null)

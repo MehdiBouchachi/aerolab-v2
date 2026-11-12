@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import type { Command, Program, Unit } from '../api/types'
 import { useApp } from '../app/context'
+import { IS_CLOUD, P } from '../api/paths'
 import { COMMAND_TEXT } from '../app/format'
 import { Badge } from '../components/ui'
 
@@ -22,9 +23,11 @@ export function validateDraft(d: Draft): Partial<Record<keyof Draft, string>> {
 export const toProgram = (d: Draft): Program => ({ mode: 'TIMED_CYCLE', on_duration_seconds: +d.on, off_duration_seconds: +d.off, max_continuous_on_seconds: +d.max, require_reservoir_ok: true })
 
 const FINAL = ['APPLIED', 'REJECTED', 'CONFLICT', 'EXPIRED']
+const PENDING = ['PENDING', 'SENT', 'PENDING_SITE', 'PENDING_DEVICE']
 
 export function ProgramEditor({ unit, pending, onChanged }: { unit: Unit; pending: Command | null; onChanged: () => void }) {
-  const { can, subscribe } = useApp()
+  const { can, subscribe, session } = useApp()
+  const site = session!.site.id
   const [draft, setDraft] = useState<Draft>({ on: '', off: '', max: '' })
   const [touched, setTouched] = useState(false)
   const [review, setReview] = useState(false)
@@ -33,14 +36,14 @@ export function ProgramEditor({ unit, pending, onChanged }: { unit: Unit; pendin
   const [busy, setBusy] = useState(false)
   const errs = validateDraft(draft)
   const applied = unit.applied_program_version ?? 0
-  const inflight = cmd !== null && (cmd.status === 'PENDING' || cmd.status === 'SENT')
+  const inflight = cmd !== null && PENDING.includes(cmd.status)
 
   useEffect(() => { if (pending) setCmd(pending) }, [pending])
   // follow the command to its end: live events + a 1 s poll as safety net
   useEffect(() => {
     if (!cmd || FINAL.includes(cmd.status)) return
     const id = cmd.id
-    const refresh = () => api<Command>('GET', `/api/v1/commands/${id}`).then(c => { setCmd(c); if (FINAL.includes(c.status)) onChanged() }).catch(() => {})
+    const refresh = () => api<Command>('GET', P.command(site, id)).then(c => { setCmd(c); if (FINAL.includes(c.status)) onChanged() }).catch(() => {})
     const t = window.setInterval(refresh, 1000)
     const off = subscribe(e => { if (e.type === 'program.updated') refresh() })
     return () => { window.clearInterval(t); off() }
@@ -52,20 +55,21 @@ export function ProgramEditor({ unit, pending, onChanged }: { unit: Unit; pendin
   const send = async () => {
     setBusy(true); setErr(null)
     try {
-      const c = await api<Command>('POST', `/api/v1/units/${unit.id}/program-requests`, { command_id: crypto.randomUUID(), expected_program_version: applied, program: toProgram(draft) })
+      const body = { command_id: crypto.randomUUID(), expected_program_version: applied, program: toProgram(draft) }
+      const c = await api<Command>('POST', P.programRequest(site, unit.id), IS_CLOUD ? { ...body, unit_id: unit.id } : body)
       setCmd(c); setReview(false)
     } catch (x) { setErr(x as ApiError); if ((x as ApiError).code === 'PROGRAM_VERSION_CONFLICT') onChanged() } finally { setBusy(false) }
   }
 
   return (
     <section aria-label="Programme editor">
-      <h3>Change programme</h3>
+      <h3>{IS_CLOUD ? 'Request a programme change (remote)' : 'Change programme'}</h3>{IS_CLOUD && <p className="muted small">This is a <b>request</b>. The site re-checks it and the controller must confirm; it is never applied directly from the cloud.</p>}
       <p className="muted small">Target: <b>{unit.name}</b> · currently applied version <b>{applied || 'none'}</b> → new version <b>{applied + 1}</b>. One unit at a time. These are timing limits, not agronomic advice – use values approved for your crop.</p>
       {cmd && (
         <div className={`note ${COMMAND_TEXT[cmd.status].tone}`} role="status">
           <Badge tone={COMMAND_TEXT[cmd.status].tone}>{COMMAND_TEXT[cmd.status].text}</Badge>
-          <div className="small">Version {cmd.new_program_version} · sent {cmd.attempts}× {cmd.reason_code ? `· ${cmd.reason_code}` : ''}</div>
-          {inflight && <div className="small">The controller has not confirmed. The unit keeps running its previous programme until it does.</div>}
+          <div className="small">Version {cmd.new_program_version} · {cmd.attempts !== undefined ? `sent ${cmd.attempts}×` : ''} {cmd.reason_code ? `· ${cmd.reason_code}` : ''}</div>
+          {inflight && <div className="small">The controller has not confirmed. The unit keeps running its previous programme until it does.{IS_CLOUD ? ' Remote requests expire in a few minutes if the site cannot pick them up, and then never run.' : ''}</div>}
           {cmd.status === 'UNKNOWN' && <div className="small">Do not press send again blindly – check the unit's applied version above first.</div>}
         </div>)}
       {err && <div className="note error" role="alert">{err.code === 'PROGRAM_VERSION_CONFLICT' ? `The controller already runs version ${String(err.details.actual_version)}. Review the current programme and try again.` : err.message}</div>}

@@ -1,0 +1,59 @@
+openapi: 3.0.3
+info:
+  title: AeroLab Cloud API
+  version: 1.0.0-phase4
+  description: |
+    Optional remote layer. Cloud sessions and Pi sessions are separate trust domains.
+    Site resources answer 404 to non-members. `x-min-role` is the per-SITE role required; EDGE = per-site edge bearer token.
+    Remote programme requests are intents: the Pi revalidates and the ESP32 confirms. There is no manual pump-test route.
+servers: [{ url: / }]
+security: [{ bearer: [] }]
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
+paths:
+  /healthz:
+    get: { summary: "Liveness", responses: { '200': { description: ok } } }
+  /readyz:
+    get: { summary: "Readiness (database)", responses: { '200': { description: ok } } }
+  /api/v1/auth/login:
+    post: { summary: "Cloud login (email or username + password)", security: [], responses: { '200': { description: ok } } }
+  /api/v1/auth/logout:
+    post: { summary: "Revoke session", responses: { '200': { description: ok } } }
+  /api/v1/session:
+    get: { summary: "User, per-site roles, capabilities", responses: { '200': { description: ok } } }
+  /api/v1/sites:
+    get: { summary: "Sites the caller is a member of", responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/summary:
+    get: { summary: "Counts + connectivity (separate facts) + site_stale", x-min-role: VIEWER, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/units:
+    get: { summary: "Paged units (same shape as the Pi)", x-min-role: VIEWER, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/units/{unitId}:
+    get: { summary: "Unit detail + pending remote request", x-min-role: VIEWER, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/units/{unitId}/readings/latest:
+    get: { summary: "Latest snapshot", x-min-role: VIEWER, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/units/{unitId}/readings/history:
+    get: { summary: "Bounded history with gaps", x-min-role: VIEWER, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/units/{unitId}/programs/applied:
+    get: { summary: "Controller-reported version", x-min-role: VIEWER, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/incidents:
+    get: { summary: "Mirrored incidents", x-min-role: VIEWER, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/sync-status:
+    get: { summary: "Last edge sync, staleness", x-min-role: VIEWER, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/remote-program-requests:
+    post: { summary: "Store a remote programme INTENT (never actuation; 202 PENDING_SITE)", x-min-role: ADMIN, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/remote-commands/{commandId}:
+    get: { summary: "Intent state: PENDING_SITE, PENDING_DEVICE, APPLIED, REJECTED, CONFLICT, EXPIRED, UNKNOWN", x-min-role: VIEWER, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/members:
+    get: { summary: "Site members", x-min-role: ADMIN, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/members/{userId}:
+    put: { summary: "Add/change a member's role at this site", x-min-role: ADMIN, responses: { '200': { description: ok } } }
+    delete: { summary: "Remove a member (last admin protected)", x-min-role: ADMIN, responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/edge-credentials/rotate:
+    post: { summary: "Issue a new per-site edge token (shown once), revoke the old", x-min-role: ADMIN, responses: { '200': { description: ok } } }
+  /api/v1/edge/sync/batch:
+    post: { summary: "Edge: idempotent ingest (site derived from the token)", x-min-role: EDGE, responses: { '200': { description: ok } } }
+  /api/v1/edge/sync/commands:
+    get: { summary: "Edge: unexpired remote intents", x-min-role: EDGE, responses: { '200': { description: ok } } }
+  /api/v1/edge/sync/command-results:
+    post: { summary: "Edge: report an intent's status", x-min-role: EDGE, responses: { '200': { description: ok } } }

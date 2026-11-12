@@ -49,7 +49,7 @@ export async function api<T>(method: string, path: string, body?: unknown, signa
 
 // ---- Server-Sent Events over fetch (EventSource cannot send Authorization) ----
 export interface SseEvent { type: string; data: unknown }
-export type StreamState = 'connecting' | 'live' | 'reconnecting'
+export type StreamState = 'connecting' | 'live' | 'reconnecting' | 'polling'
 
 /** Parses an SSE text buffer; returns complete events and the unconsumed rest. */
 export function parseSse(buf: string): { events: SseEvent[]; rest: string } {

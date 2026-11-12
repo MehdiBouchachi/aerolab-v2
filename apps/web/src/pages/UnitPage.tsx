@@ -7,6 +7,7 @@ import { Badge, Empty, ErrorNote, Loading, Sim } from '../components/ui'
 import { Chart } from '../components/Chart'
 import { ProgramEditor } from './ProgramEditor'
 import { useApp } from '../app/context'
+import { P } from '../api/paths'
 
 const RANGES = [['1h', 3600e3], ['6h', 6 * 3600e3], ['24h', 24 * 3600e3], ['7d', 7 * 86400e3]] as const
 const CHARTS = ['water_temp_c', 'ph', 'ec_ms_cm', 'air_temp_c', 'relative_humidity_pct']
@@ -14,15 +15,16 @@ const CHARTS = ['water_temp_c', 'ph', 'ec_ms_cm', 'air_temp_c', 'relative_humidi
 export function UnitPage() {
   const { unitId = '' } = useParams()
   const { session } = useApp()
+  const site = session!.site.id
   const [range, setRange] = useState<(typeof RANGES)[number][0]>('1h')
-  const u = useFetch<{ unit: Unit; pending_command: Command | null }>(`/api/v1/units/${unitId}`, ['unit.state', 'unit.reading', 'program.updated', 'incident.updated'])
+  const u = useFetch<{ unit: Unit; pending_command: Command | null }>(P.unit(site, unitId), ['unit.state', 'unit.reading', 'program.updated', 'incident.updated'])
   const win = RANGES.find(r => r[0] === range)![1]
   // stable "now": the history path only changes when the range changes or once a minute
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { setNow(Date.now()); const t = window.setInterval(() => setNow(Date.now()), 60000); return () => window.clearInterval(t) }, [range])
-  const hist = useFetch<History>(`/api/v1/units/${unitId}/readings/history?from=${encodeURIComponent(new Date(now - win).toISOString())}&to=${encodeURIComponent(new Date(now).toISOString())}`, [], 0)
-  const prog = useFetch<{ applied: { version: number; program: Program; applied_at: string } | null; controller_reported_version: number | null }>(`/api/v1/units/${unitId}/programs/applied`, ['program.updated'])
-  const inc = useFetch<{ incidents: Incident[] }>(`/api/v1/sites/${session!.site.id}/incidents?unit_id=${unitId}&state=active`, ['incident.updated'])
+  const hist = useFetch<History>(`${P.history(site, unitId)}?from=${encodeURIComponent(new Date(now - win).toISOString())}&to=${encodeURIComponent(new Date(now).toISOString())}`, [], 0)
+  const prog = useFetch<{ applied: { version: number; program: Program; applied_at: string } | null; controller_reported_version: number | null }>(P.applied(site, unitId), ['program.updated'])
+  const inc = useFetch<{ incidents: Incident[] }>(`/api/v1/sites/${site}/incidents?unit_id=${unitId}&state=active`, ['incident.updated'])
 
   if (u.loading) return <Loading what="unit" />
   if (!u.data) return <><ErrorNote error={u.error} retry={u.reload} /><Link to="/">← Overview</Link></>

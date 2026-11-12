@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -42,7 +43,15 @@ type Config struct {
 	RecordQueueSize int
 
 	// Cloud sync is OFF by default; the outbox is only written when linked.
-	CloudSyncEnabled bool
+	CloudSyncEnabled   bool
+	CloudURL           string // https://... (plain http only for loopback or explicit insecure flag)
+	CloudToken         string // per-site edge credential; supply via secrets, never Git
+	CloudAllowInsecure bool   // lab only
+	CloudSyncInterval  time.Duration
+	// RemotePrograms: accept programme REQUESTS that originated in the cloud.
+	// Default OFF: a site must opt in locally. Even when on, the Pi revalidates
+	// and the ESP32 confirms; manual pump tests are never accepted remotely.
+	RemotePrograms bool
 
 	BootstrapAdminUser     string
 	BootstrapAdminPassword string
@@ -106,6 +115,12 @@ func Load() (*Config, error) {
 		BootstrapAdminUser: env("AEROLAB_BOOTSTRAP_ADMIN_USER", ""), BootstrapAdminPassword: env("AEROLAB_BOOTSTRAP_ADMIN_PASSWORD", ""),
 		ProvisionFile: env("AEROLAB_PROVISION_FILE", ""), LogLevel: env("AEROLAB_LOG_LEVEL", "info"),
 	}
+	c.CloudURL, c.CloudToken = env("AEROLAB_CLOUD_URL", ""), env("AEROLAB_CLOUD_TOKEN", "")
+	c.CloudAllowInsecure = envBool("AEROLAB_CLOUD_ALLOW_INSECURE", false)
+	c.RemotePrograms = envBool("AEROLAB_REMOTE_PROGRAMS", false)
+	if c.CloudSyncInterval, err = envDur("AEROLAB_CLOUD_SYNC_INTERVAL", 5*time.Second); err != nil {
+		return nil, err
+	}
 	if c.StaleAfter, err = envDur("AEROLAB_STALE_AFTER", 15*time.Second); err != nil {
 		return nil, err
 	}
@@ -150,6 +165,23 @@ func (c *Config) Validate() error {
 	}
 	if c.RetentionDays < 1 {
 		return fmt.Errorf("AEROLAB_RETENTION_DAYS must be >= 1")
+	}
+	if c.CloudSyncEnabled {
+		if c.CloudURL == "" || c.CloudToken == "" {
+			return fmt.Errorf("cloud sync enabled but AEROLAB_CLOUD_URL / AEROLAB_CLOUD_TOKEN missing")
+		}
+		u, err := url.Parse(c.CloudURL)
+		if err != nil || u.Host == "" {
+			return fmt.Errorf("AEROLAB_CLOUD_URL invalid")
+		}
+		host := u.Hostname()
+		loop := host == "localhost" || host == "127.0.0.1" || host == "::1"
+		if u.Scheme != "https" && !(u.Scheme == "http" && (loop || c.CloudAllowInsecure)) {
+			return fmt.Errorf("AEROLAB_CLOUD_URL must be https (http only for loopback or AEROLAB_CLOUD_ALLOW_INSECURE=true)")
+		}
+		if c.CloudSyncInterval < time.Second {
+			return fmt.Errorf("AEROLAB_CLOUD_SYNC_INTERVAL must be >= 1s")
+		}
 	}
 	if c.RecordQueueSize < 16 || c.RecordQueueSize > 65536 {
 		return fmt.Errorf("AEROLAB_RECORD_QUEUE must be 16..65536")

@@ -41,6 +41,8 @@ export function unitStatus(u: Unit): { text: string; tone: Tone } {
   }
 }
 export const COMMAND_TEXT: Record<CommandStatus, { text: string; tone: Tone }> = {
+  PENDING_SITE: { text: 'Pending – stored in the cloud, the site has not picked it up yet', tone: 'warn' },
+  PENDING_DEVICE: { text: 'Pending – the site accepted it, waiting for the controller', tone: 'warn' },
   PENDING: { text: 'Pending – not sent yet', tone: 'warn' },
   SENT: { text: 'Pending – waiting for the controller', tone: 'warn' },
   APPLIED: { text: 'Applied – confirmed by the controller', tone: 'ok' },

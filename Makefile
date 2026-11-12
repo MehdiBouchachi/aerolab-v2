@@ -5,7 +5,7 @@ DEVICES ?= 10
 BROKER_PORT ?= 18830
 HTTP_ADDR ?= 127.0.0.1:18080
 
-.PHONY: web-build web-test help build test test-race test-integration load lint dev-provision dev-stack dev-stop clean pi-arm64
+.PHONY: web-build-cloud web-build web-test help build test test-race test-integration load lint dev-provision dev-stack dev-stop clean pi-arm64
 
 help:
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s $$'\t'
@@ -13,10 +13,14 @@ help:
 build: ## build edge + simulator binaries into ./bin
 	mkdir -p bin
 	cd services/edge-api && go build -trimpath -o ../../bin/edge ./cmd/edge
+	cd services/cloud-api && go build -trimpath -o ../../bin/cloud ./cmd/cloud
 	cd simulator && go build -trimpath -o ../bin/aerolab-sim ./cmd/aerolab-sim && go build -trimpath -o ../bin/aerolab-seed ./cmd/aerolab-seed
 
 web-build: ## build the dashboard into apps/web/dist (served by the edge)
 	cd apps/web && pnpm install --frozen-lockfile=false && pnpm build
+
+web-build-cloud: ## build the dashboard for the CLOUD origin into apps/web/dist-cloud
+	cd apps/web && pnpm install --frozen-lockfile=false && VITE_SOURCE=cloud pnpm build --outDir dist-cloud
 
 web-test: ## dashboard typecheck + unit tests
 	cd apps/web && pnpm typecheck && pnpm test
@@ -32,11 +36,13 @@ lint: ## gofmt + go vet on every module
 test: ## fast tests: contracts, edge unit/handler tests, simulator unit tests
 	cd contracts/mqtt && go test -count=1 ./...
 	cd services/edge-api && go test -count=1 ./...
+	cd services/cloud-api && go test -count=1 ./...   # needs PostgreSQL binaries (skips otherwise)
 	cd simulator && go test -count=1 ./...
 
 test-race: ## same, with the race detector
 	cd contracts/mqtt && go test -race -count=1 ./...
 	cd services/edge-api && go test -race -count=1 ./...
+	cd services/cloud-api && go test -race -count=1 ./...
 	cd simulator && go test -race -count=1 ./...
 
 test-integration: ## real Mosquitto + real edge binary + simulated fleet (~1 min)

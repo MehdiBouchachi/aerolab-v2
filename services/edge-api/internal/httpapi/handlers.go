@@ -19,6 +19,7 @@ import (
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/incidents"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/roles"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/storage"
+	edgesync "github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sync"
 )
 
 // readingStaleAfter: a snapshot older than 2.5 snapshot periods is outdated.
@@ -136,7 +137,7 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, u auth.User) {
 		"site":                    map[string]any{"id": s.Cfg.SiteID, "name": s.Cfg.SiteName, "role": u.Role},
 		"simulated_data_accepted": s.Cfg.AllowSimulatedData,
 		"server_time":             storage.Now(),
-		"cloud":                   map[string]any{"enabled": s.Cfg.CloudSyncEnabled, "last_sync_at": nil},
+		"cloud":                   s.cloudInfo(),
 	})
 }
 
@@ -446,7 +447,7 @@ func (s *Server) summary(w http.ResponseWriter, r *http.Request, u auth.User) {
 		// edge cannot observe it. The edge does not probe the WAN in Phase 1.
 		"connectivity": map[string]any{
 			"local_api_reachable": true, "site_lan_healthy": mq, "mqtt_broker_connected": mq,
-			"site_wan_reachable": nil, "cloud_api_reachable": nil, "last_cloud_sync_at": nil,
+			"site_wan_reachable": s.cloudReach(), "cloud_api_reachable": s.cloudReach(), "last_cloud_sync_at": s.cloudInfo()["last_sync_at"],
 			"edge_seen_at": storage.FormatTime(now), "connection_path": "LOCAL", "is_currently_stale": false,
 		},
 		"observed_at": storage.FormatTime(now), "source": "local",
@@ -591,6 +592,9 @@ func (s *Server) ackIncident(w http.ResponseWriter, r *http.Request, u auth.User
 	err := s.DB.Tx(r.Context(), func(tx *sql.Tx) error {
 		var e error
 		inc, changed, e = incidents.Acknowledge(r.Context(), tx, s.Cfg.SiteID, r.PathValue("incidentId"), u.ID)
+		if e == nil && changed && s.Cfg.CloudSyncEnabled {
+			e = edgesync.EnqueueIncident(r.Context(), tx, s.Cfg.SiteID, inc)
+		}
 		return e
 	})
 	if errors.Is(err, incidents.ErrNotFound) {
@@ -679,7 +683,7 @@ func (s *Server) storageInfo(w http.ResponseWriter, r *http.Request, u auth.User
 	}
 	writeJSON(w, 200, map[string]any{"status": status, "database_bytes": d.DBBytes, "wal_bytes": d.WALBytes, "disk_total_bytes": d.TotalBytes, "disk_free_bytes": d.FreeBytes,
 		"min_free_bytes": s.Cfg.MinFreeBytes, "retention_days": s.Cfg.RetentionDays, "telemetry_rows": tel, "event_rows": ev,
-		"cloud_sync": map[string]any{"enabled": s.Cfg.CloudSyncEnabled, "outbox_pending": ob}, "durable_receipts_enabled": s.Metrics.StorageOK.Load(), "observed_at": storage.Now()})
+		"cloud_sync": s.cloudDetail(ob), "durable_receipts_enabled": s.Metrics.StorageOK.Load(), "observed_at": storage.Now()})
 }
 
 func (s *Server) auditLog(w http.ResponseWriter, r *http.Request, u auth.User) {
@@ -724,3 +728,33 @@ func (s *Server) diag(w http.ResponseWriter, r *http.Request, u auth.User) {
 }
 
 var _ = fmt.Sprintf
+
+// cloudInfo / cloudReach report ONLY what the sync worker actually observed by
+// talking to the cloud API. With sync disabled (the permanently-offline site)
+// reachability is unknown (null), never "false" and never invented.
+func (s *Server) cloudInfo() map[string]any {
+	if s.Cloud == nil {
+		return map[string]any{"enabled": false, "last_sync_at": nil}
+	}
+	st := s.Cloud.Status()
+	return map[string]any{"enabled": true, "last_sync_at": st.LastSyncAt, "reachable": st.Reachable, "backlog": st.Backlog, "consecutive_failures": st.ConsecutiveFailures, "remote_programs_accepted": st.RemotePrograms}
+}
+
+func (s *Server) cloudReach() any {
+	if s.Cloud == nil {
+		return nil
+	}
+	if r := s.Cloud.Status().Reachable; r != nil {
+		return *r
+	}
+	return nil
+}
+
+func (s *Server) cloudDetail(pending int64) map[string]any {
+	m := map[string]any{"enabled": s.Cfg.CloudSyncEnabled, "outbox_pending": pending}
+	if s.Cloud != nil {
+		st := s.Cloud.Status()
+		m["reachable"], m["last_sync_at"], m["last_error"], m["consecutive_failures"], m["rejected_items_dropped"] = st.Reachable, st.LastSyncAt, st.LastError, st.ConsecutiveFailures, st.RejectedItems
+	}
+	return m
+}

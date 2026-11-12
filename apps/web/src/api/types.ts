@@ -19,11 +19,11 @@ export interface Program {
   mode: 'TIMED_CYCLE'; on_duration_seconds: number; off_duration_seconds: number
   max_continuous_on_seconds: number; require_reservoir_ok: true
 }
-export type CommandStatus = 'PENDING' | 'SENT' | 'APPLIED' | 'REJECTED' | 'CONFLICT' | 'EXPIRED' | 'UNKNOWN'
+export type CommandStatus = 'PENDING_SITE' | 'PENDING_DEVICE' | 'PENDING' | 'SENT' | 'APPLIED' | 'REJECTED' | 'CONFLICT' | 'EXPIRED' | 'UNKNOWN'
 export interface Command {
   id: string; unit_id: string; status: CommandStatus; reason_code: string | null
   expected_program_version: number; new_program_version: number | null
-  attempts: number; applied_confirmed: boolean; note: string; program?: Program
+  attempts?: number; applied_confirmed: boolean; note: string; program?: Program
 }
 export interface Incident {
   id: string; unit_id: string; severity: 'info' | 'warning' | 'critical'; code: string; status: string
@@ -31,15 +31,17 @@ export interface Incident {
   first_seen_at: string; last_seen_at: string; occurrences: number
   acknowledged_by: string | null; acknowledged_at: string | null; resolved_at: string | null
 }
+export interface SiteRef { id: string; name: string; role: Role; stale?: boolean; last_sync_at?: string | null }
 export interface Session {
-  user: { id: string; username: string; role: Role }; source: 'local'
+  sites?: SiteRef[]
+  user: { id: string; username: string; role: Role }; source: 'local' | 'cloud'
   capabilities: string[]; site: { id: string; name: string }
   simulated_data_accepted: boolean; server_time: string
 }
 export interface Summary {
   units: { total: number; healthy: number; attention: number; stale: number; never_seen: number }
   active_incidents: { critical: number; warning: number; total: number }
-  contains_simulated_data: boolean
+  contains_simulated_data: boolean; site_stale?: boolean; received_at?: string
   connectivity: { mqtt_broker_connected: boolean; site_wan_reachable: boolean | null; cloud_api_reachable: boolean | null; last_cloud_sync_at: string | null }
   observed_at: string
 }

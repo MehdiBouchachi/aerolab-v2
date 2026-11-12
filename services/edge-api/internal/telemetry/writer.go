@@ -19,6 +19,7 @@ import (
 	"time"
 
 	mc "github.com/mehdibouchachi/aerolab-v2/contracts/mqtt"
+	sc "github.com/mehdibouchachi/aerolab-v2/contracts/sync"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/auth"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/diagnostics"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sse"
@@ -260,16 +261,20 @@ func (w *Writer) outbox(ctx context.Context, tx *sql.Tx, j *recordJob, eventID s
 	var typ string
 	var pri int
 	var payload []byte
+	var rec []byte
 	if j.kind == kindTelemetry {
-		typ, pri = "telemetry.snapshot", 3
-		payload, _ = json.Marshal(j.tel)
+		typ, pri = sc.EventTelemetry, sc.P3
+		rec, _ = json.Marshal(j.tel)
 	} else {
-		typ, pri = "device.event", 1
+		typ, pri = sc.EventDeviceEvent, sc.P1
 		if j.ev.Severity == mc.SevCritical {
-			pri = 0
+			pri = sc.P0
 		}
-		payload, _ = json.Marshal(j.ev)
+		rec, _ = json.Marshal(j.ev)
 	}
+	// original device fields stay untouched; the Pi's placement in time and
+	// the durable-store time travel beside them
+	payload, _ = json.Marshal(sc.RecordEnvelope{Record: rec, EffectiveAtUTC: j.effective.UTC().Format(time.RFC3339Nano), TimeQuality: j.timeQ, RecordedAt: time.Now().UTC().Format(time.RFC3339Nano)})
 	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO outbox(event_id,event_type,priority,site_id,payload_json,created_at) VALUES (?,?,?,?,?,?)`,
 		eventID, typ, pri, j.siteID, string(payload), storage.Now())
 	return err

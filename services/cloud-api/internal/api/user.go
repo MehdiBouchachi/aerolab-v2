@@ -129,9 +129,10 @@ func (s *Server) visibleSites(ctx context.Context, userID string) ([]siteRow, er
 }
 
 var capsByRole = map[auth.Role][]string{
+	// only what the cloud API really implements (no remote acknowledge / crop entry yet)
 	auth.Viewer:   {"view_data"},
-	auth.Operator: {"view_data", "ack_incident", "record_crop"},
-	auth.Admin:    {"view_data", "ack_incident", "record_crop", "edit_program", "manage_members"},
+	auth.Operator: {"view_data"},
+	auth.Admin:    {"view_data", "edit_program", "manage_members"},
 }
 
 func (s *Server) session(w http.ResponseWriter, r *http.Request, u auth.User) {

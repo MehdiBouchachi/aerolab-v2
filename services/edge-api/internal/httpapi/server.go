@@ -26,12 +26,16 @@ import (
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/roles"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sse"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/storage"
+	edgesync "github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sync"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/telemetry"
 )
 
 const cookieName = "aerolab_session"
 
 type MQTTStatus interface{ Connected() bool }
+
+// CloudLink reports the observed cloud connection (nil when sync is disabled).
+type CloudLink interface{ Status() edgesync.CloudStatus }
 
 type Deps struct {
 	Cfg     *config.Config
@@ -43,6 +47,7 @@ type Deps struct {
 	Metrics *diagnostics.Metrics
 	Writer  *telemetry.Writer
 	MQTT    MQTTStatus
+	Cloud   CloudLink // nil when cloud sync is disabled
 	Static  fs.FS
 	Log     *slog.Logger
 }

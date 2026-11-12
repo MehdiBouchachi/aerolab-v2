@@ -30,7 +30,8 @@ var version = "dev"
 func main() {
 	cmd := "serve"
 	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
-		cmd, os.Args = os.Args[1], append(os.Args[:1], os.Args[2:]...)
+		cmd = os.Args[1]
+		os.Args = append([]string{os.Args[0]}, os.Args[2:]...) // copy: never alias-and-overwrite
 	}
 	cfg, err := config.Load()
 	if err != nil {
