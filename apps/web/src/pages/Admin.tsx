@@ -5,6 +5,8 @@ import { useFetch } from '../app/hooks'
 import type { Role, StorageInfo } from '../api/types'
 import { bytes, clock } from '../app/format'
 import { ErrorNote, Loading } from '../components/ui'
+import { IS_CLOUD } from '../api/paths'
+import QRCode from 'qrcode'
 
 interface U { id: string; username: string; role: Role; disabled: boolean }
 
@@ -16,7 +18,15 @@ export function Admin() {
   const audit = useFetch<{ events: { id: string; actor_id: string; action: string; target_type: string; occurred_at: string }[] }>(`/api/v1/sites/${site}/audit?limit=20`, [], 20000)
   const [err, setErr] = useState<ApiError | null>(null)
   const [nu, setNu] = useState({ username: '', password: '', role: 'VIEWER' as Role })
+  const [pair, setPair] = useState<{ code: string; expires: string; payload: string; qr: string } | null>(null)
   if (!can('manage_users')) return <p>Administration is available to administrators only.</p>
+  const startPairing = async () => {
+    setErr(null)
+    try {
+      const r = await api<{ code: string; expires_at: string; qr_payload: string }>('POST', `/api/v1/site-pairing/start`, {})
+      setPair({ code: r.code, expires: r.expires_at, payload: r.qr_payload, qr: await QRCode.toDataURL(r.qr_payload, { margin: 1, width: 280 }) })
+    } catch (x) { setErr(x as ApiError) }
+  }
 
   const create = async (e: FormEvent) => {
     e.preventDefault(); setErr(null)
@@ -52,6 +62,16 @@ export function Admin() {
         <label>Role<select value={nu.role} onChange={e => setNu({ ...nu, role: e.target.value as Role })}><option>VIEWER</option><option>OPERATOR</option><option>ADMIN</option></select></label>
         <button className="primary">Add account</button>
       </form>
+      {!IS_CLOUD && (<>
+        <h2>Pair a phone</h2>
+        <p className="muted small">Join the site Wi-Fi with the phone, then scan this code in the AeroLab app. It is valid for 5 minutes and works once. It contains no password; the phone still signs in with a site account.</p>
+        <button onClick={() => void startPairing()}>Show pairing code</button>
+        {pair && (<div className="panel" style={{ marginTop: '.6rem' }}>
+          <img src={pair.qr} alt={`Pairing QR code ${pair.code}`} width={280} height={280} />
+          <p>Code: <b>{pair.code}</b> · expires {new Date(pair.expires).toLocaleTimeString()}</p>
+          <details><summary>Pairing text (for manual entry)</summary><textarea readOnly rows={4} style={{ width: '100%' }} value={pair.payload} aria-label="Pairing text" /></details>
+        </div>)}
+      </>)}
       <h2>Recent audit events</h2>
       <ul className="plain">{audit.data?.events.map(e => <li key={e.id}><span className="muted">{clock(e.occurred_at)}</span> {e.action} {e.target_type && `· ${e.target_type}`}</li>)}</ul>
     </>
