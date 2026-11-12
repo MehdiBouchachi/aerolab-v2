@@ -5,8 +5,8 @@ the Raspberry Pi manages the site; the cloud is optional; web and mobile are int
 dependencies.** Full specification: `AEROLAB_V2_FULL_PROJECT_ARCHITECTURE.md` (supplied separately;
 keep a copy at the repo root). This README says what actually exists today.
 
-> **Current state: Phase 1 complete (edge backend foundation + ESP32 simulator + contracts).**
-> No web UI, mobile app, cloud API or real firmware exist yet. Nothing here has run on a Raspberry Pi
+> **Current state: Phase 1 complete + the core of Phase 2 (local web dashboard).**
+> No mobile app, cloud API, crop/export features or real firmware exist yet. Nothing here has run on a Raspberry Pi
 > or an ESP32. See [`docs/development/status.md`](docs/development/status.md) for the honest checklist.
 
 ## What works now
@@ -29,7 +29,8 @@ Requirements: Go ≥ 1.24, `mosquitto` (`apt install mosquitto`). No cloud accou
 make test               # contracts + edge + simulator unit/handler tests
 make test-race          # same with the race detector
 make test-integration   # real Mosquitto + real edge binary (SIGKILL-able) + simulated fleet (~1 min)
-make dev-stack          # 10 SIMULATED controllers + broker + edge; Ctrl-C to stop
+make web-build         # build the dashboard (needs pnpm)
+make dev-stack          # 10 SIMULATED controllers + broker + edge + dashboard at http://127.0.0.1:18080/ ; Ctrl-C to stop
 ```
 
 `make dev-stack` prints the API URL and where the random dev admin password lives (`.dev/edge.env`,
@@ -66,7 +67,7 @@ simulator             esp32/ (device model), seed/ (dev provisioning), cmd/
 tests/integration     real-broker scenarios + opt-in load test
 infrastructure/       raspberry-pi/ (systemd + Mosquitto config: UNVALIDATED on a Pi), development/
 docs/                 decisions/ (ADR), architecture/, development/status.md, performance/
-▫ apps/web  ▫ apps/mobile  ▫ services/cloud-api  ▫ firmware/esp32  ▫ packages  ▫ infrastructure/cloud
+apps/web (dashboard)   ▫ apps/mobile  ▫ services/cloud-api  ▫ firmware/esp32  ▫ packages  ▫ infrastructure/cloud
 ```
 
 ## Safety and honesty rules baked into the code

@@ -1,8 +1,18 @@
-# Web application (React + Vite)
+# Web dashboard (React + TypeScript + Vite)
 
-**Status: NOT STARTED (Phase 2).** No code exists here yet; this folder only reserves the structure from the spec.
+Built once into `dist/` and served by the Pi's edge binary (`AEROLAB_STATIC_DIR`); no CDN, fonts or remote
+assets, so it works with no internet. All data comes from the edge API + SSE stream; the server enforces roles.
 
-Planned: the local dashboard (login, overview, units, history charts, incidents, programme editor with
-Draft → Pending → Applied states, crop journal, users, exports), built once and served by the Pi, with a
-second cloud build. It consumes the edge API in `contracts/openapi/edge.v1.yaml` and the SSE stream
-(`/api/v1/sites/{siteId}/events`). All JS/CSS/fonts must ship locally (no CDN) so it works with no internet.
+```bash
+make web-build        # -> apps/web/dist (then `make dev-stack` serves it at the edge URL)
+make web-test         # typecheck + vitest (14 tests)
+cd apps/web && pnpm dev   # Vite dev server, proxies /api to the edge (AEROLAB_EDGE=http://127.0.0.1:18080)
+```
+
+Screens: Login · Overview (summary tiles, active alerts, unit cards) · Unit detail (status, readings with quality,
+history charts with explicit gaps, applied programme, programme editor Draft→Review→Pending→Applied/Rejected/
+Conflict/Unknown/Expired) · Alerts (acknowledge ≠ resolve) · Administration (storage health, controllers, local
+accounts, audit). Every page shows source (LOCAL), live-stream state, freshness and SIMULATED labels.
+
+Not built yet: crop batches/journal/harvest, CSV/JSON export, calibration records, dark-mode toggle (follows the OS),
+i18n. The backend endpoints for crops/exports do not exist yet, so no placeholder screens were added.

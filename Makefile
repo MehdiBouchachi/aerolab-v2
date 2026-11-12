@@ -5,7 +5,7 @@ DEVICES ?= 10
 BROKER_PORT ?= 18830
 HTTP_ADDR ?= 127.0.0.1:18080
 
-.PHONY: help build test test-race test-integration load lint dev-provision dev-stack dev-stop clean pi-arm64
+.PHONY: web-build web-test help build test test-race test-integration load lint dev-provision dev-stack dev-stop clean pi-arm64
 
 help:
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s $$'\t'
@@ -14,6 +14,12 @@ build: ## build edge + simulator binaries into ./bin
 	mkdir -p bin
 	cd services/edge-api && go build -trimpath -o ../../bin/edge ./cmd/edge
 	cd simulator && go build -trimpath -o ../bin/aerolab-sim ./cmd/aerolab-sim && go build -trimpath -o ../bin/aerolab-seed ./cmd/aerolab-seed
+
+web-build: ## build the dashboard into apps/web/dist (served by the edge)
+	cd apps/web && pnpm install --frozen-lockfile=false && pnpm build
+
+web-test: ## dashboard typecheck + unit tests
+	cd apps/web && pnpm typecheck && pnpm test
 
 pi-arm64: ## cross-compile the edge for Raspberry Pi 5 (pure Go, no CGO)
 	mkdir -p bin

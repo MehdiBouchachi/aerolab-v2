@@ -13,7 +13,10 @@ Legend: ✅ done and tested here · 🟡 done, partially verified · ⛔ not sta
 | Incident lifecycle (dedupe, ack≠resolve, stale) | ✅ heartbeat-driven | incidents tests + A08 integration |
 | Command state machine (PENDING≠APPLIED, ≤3 sends, idempotent, conflict, expiry, reconcile) | ✅ | commands tests, A05 integration |
 | Local auth (argon2id, hashed sessions, rate limit incl. per-IP), RBAC matrix, last-admin guard | ✅ | httpapi/auth tests |
-| SSE hub with bounded queues | 🟡 unit-less: used by API, `events` handler not exercised by a test | – |
+| SSE hub + stream handler | ✅ | sse tests (slow-client drop, caps), handler test, live-events integration test |
+| Reboot / clock honesty (A24) | ✅ | integration: new boot_id, no fabricated timestamps, RTC rows labelled |
+| **Phase 2 web dashboard** (login, overview, unit, history, programme editor, alerts, admin) | ✅ for these screens | 14 vitest tests; driven in headless Chromium against the live simulated stack (login, programme Pending→Applied, live critical alert, acknowledge, mobile 375px no overflow) |
+| Crop batches/journal/harvest, exports, calibration, pairing | ⛔ | no backend yet |
 | Broker auth + per-device ACL (A25) | ✅ vs Mosquitto 2.0.18 (plain MQTT, no TLS) | `TestA25_…` |
 | ESP32 simulator, 10/20 devices | ✅ | sim tests, integration, `make load` |
 | Load: RSS/CPU/recovery | 🟡 measured on x86 sandbox only | `docs/performance/phase1-dev-machine.md` |
@@ -34,5 +37,8 @@ Legend: ✅ done and tested here · 🟡 done, partially verified · ⛔ not sta
 * Not tested: clock-skew with an RTC-equipped board end-to-end, SSE slow-client drop, 24 h soak, Windows.
 
 ## Not started
-Phase 2 web UI (+ crop/harvest/export), Phase 3 ESP-IDF firmware (needs pin map, sensor models, relay polarity, approved
+Phase 2 remainder (crop/harvest/export + their API), Phase 3 ESP-IDF firmware (needs pin map, sensor models, relay polarity, approved
 limits - spec §22), Phase 4 cloud API/sync sender, Phase 5 mobile, Phase 6 Pi hardening/soak tests, A14/A15/A16 real-hardware tests.
+
+## Bug found and fixed while extending the tests
+The simulator's network link did not notice a locally dropped socket (only the 10 s MQTT keep-alive would), so after a simulated reset or Wi-Fi drop a device could keep publishing into a dead connection. Fixed; covered by the reboot and Wi-Fi integration tests.

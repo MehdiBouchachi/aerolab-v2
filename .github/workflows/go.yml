@@ -26,3 +26,13 @@ jobs:
       - run: make pi-arm64
       - uses: actions/upload-artifact@v4
         with: { name: edge-linux-arm64, path: bin/edge-linux-arm64 }
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: make web-test
+      - run: make web-build
