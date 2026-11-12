@@ -41,10 +41,10 @@ type Device struct {
 	raised  map[string]bool // fault codes currently raised (for event edges)
 
 	// observability for tests / control API (not part of the wire contract)
-	pumpCycles    int
-	pumpOnTotal   time.Duration
-	dropResults   int
-	rejectedRecs  int
+	pumpCycles   int
+	pumpOnTotal  time.Duration
+	dropResults  int
+	rejectedRecs int
 
 	link   *netLink
 	notify chan struct{}

@@ -13,7 +13,7 @@ import (
 func testDevice(t *testing.T, mut func(*Config)) *Device {
 	t.Helper()
 	cfg := Config{SiteID: "site-test-01", DeviceID: "esp32-test-001", UnitID: "unit-test-001",
-		BrokerURL: "tcp://127.0.0.1:1", // nothing listens: the device is permanently "offline"
+		BrokerURL:   "tcp://127.0.0.1:1", // nothing listens: the device is permanently "offline"
 		ControlTick: 10 * time.Millisecond, SelfCheckTime: 30 * time.Millisecond, TelemetryEvery: time.Hour, HeartbeatEvery: time.Hour,
 		ReconnectMin: 50 * time.Millisecond, ReconnectMax: 100 * time.Millisecond, Seed: 1}
 	if mut != nil {
