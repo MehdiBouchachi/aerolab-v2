@@ -21,6 +21,7 @@ import (
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/diagnostics"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/httpapi"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/mqtt"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/pairing"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/roles"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sse"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/storage"
@@ -47,6 +48,7 @@ type App struct {
 	MQTT    *mqtt.Client
 	HTTP    *httpapi.Server
 	Sync    *edgesync.Worker
+	Pair    *pairing.Service
 
 	ln net.Listener
 }
@@ -74,6 +76,9 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	}
 	a := &App{Cfg: cfg, Log: log, DB: db, Hub: sse.NewHub(), Metrics: diagnostics.New()}
 	a.Auth = auth.New(db, cfg.SiteID)
+	if a.Pair, err = pairing.Ensure(ctx, db, cfg.SiteID); err != nil {
+		return nil, err
+	}
 	a.Reg = devices.NewRegistry(db, cfg.SiteID)
 	if err := a.Reg.Load(ctx); err != nil {
 		return nil, err
@@ -112,7 +117,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		a.Sync = edgesync.NewWorker(edgesync.Options{SiteID: cfg.SiteID, URL: cfg.CloudURL, Token: cfg.CloudToken, Interval: cfg.CloudSyncInterval, EdgeVersion: "edge-" + Version, RemotePrograms: cfg.RemotePrograms}, db, a.Cmds, nil, log)
 		cloud = a.Sync
 	}
-	a.HTTP = httpapi.New(httpapi.Deps{Cfg: cfg, DB: db, Auth: a.Auth, Reg: a.Reg, Cmds: a.Cmds, Hub: a.Hub, Metrics: a.Metrics, Writer: a.Writer, MQTT: a.MQTT, Cloud: cloud, Static: static.FS, Log: log})
+	a.HTTP = httpapi.New(httpapi.Deps{Cfg: cfg, DB: db, Auth: a.Auth, Reg: a.Reg, Cmds: a.Cmds, Hub: a.Hub, Metrics: a.Metrics, Writer: a.Writer, MQTT: a.MQTT, Cloud: cloud, Pairing: a.Pair, Static: static.FS, Log: log})
 	if a.Sync != nil {
 		a.Sync.SetStateFunc(a.HTTP.Snapshot)
 	}

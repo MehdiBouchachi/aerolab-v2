@@ -65,6 +65,12 @@ paths:
     get: { x-surface: edge-only, security: [], summary: Readiness (booleans only), responses: { '200': { description: ready }, '503': { description: database unavailable } } }
   /api/v1/local/auth/login:
     post: { x-surface: edge-only, security: [], summary: Local login, responses: { '200': { description: session }, '401': { description: bad credentials }, '429': { description: rate limited } } }
+  /api/v1/identity:
+    get: { x-surface: edge-only, security: [], summary: "Signed identity proof for a caller-chosen challenge (Ed25519); lets the phone verify the Pi before sending credentials", responses: { '200': { description: ok }, '400': { description: bad challenge } } }
+  /api/v1/site-pairing/start:
+    post: { x-surface: edge-only, x-min-role: ADMIN, summary: "Create a single-use 5-minute pairing code + QR payload (no long-term secret)", responses: { '201': { description: created }, '429': { description: too many unused codes } } }
+  /api/v1/site-pairing/confirm:
+    post: { x-surface: edge-only, security: [], summary: "Consume a pairing code once; returns the site id + public key to pin", responses: { '200': { description: ok }, '401': { description: invalid or expired }, '429': { description: rate limited } } }
   /api/v1/local/auth/logout:
     post: { x-surface: edge-only, summary: Revoke the session, responses: { '204': { description: ok } } }
   /api/v1/session:

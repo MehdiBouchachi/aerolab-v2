@@ -5,9 +5,20 @@ the Raspberry Pi manages the site; the cloud is optional; web and mobile are int
 dependencies.** Full specification: `AEROLAB_V2_FULL_PROJECT_ARCHITECTURE.md` (supplied separately;
 keep a copy at the repo root). This README says what actually exists today.
 
-> **Current state: Phase 1 complete + the core of Phase 2 (local web dashboard).**
-> No mobile app, cloud API, crop/export features or real firmware exist yet. Nothing here has run on a Raspberry Pi
+> **Current state: Phases 1-5 implemented to the extent stated below; NOTHING has run on a Raspberry Pi, an ESP32 or a phone.**
+> Backend, cloud and the web UI are tested end to end on a development machine with a real Mosquitto and PostgreSQL.
+> Firmware logic is tested on the host (the ESP-IDF glue is unbuilt). The mobile app's logic is tested; its UI is only typechecked. Nothing here has run on a Raspberry Pi
 > or an ESP32. See [`docs/development/status.md`](docs/development/status.md) for the honest checklist.
+
+## Status by phase
+| Phase | State |
+|---|---|
+| 1 Edge + simulator + contracts | ✅ tested (unit, race, real-broker integration, load on x86) |
+| 2 Web dashboard (local) | ✅ screens listed in `apps/web/README.md`; crop/harvest/export **not built** |
+| 3 ESP32 firmware | 🟡 portable core tested on host (gcc + ASan/UBSan); ESP-IDF glue **never built**; outputs disabled until wiring is verified |
+| 4 Cloud API + sync | ✅ tested against real PostgreSQL + a real Pi-side worker, incl. WAN loss/recovery and remote requests; not deployed anywhere |
+| 5 Mobile | 🟡 logic tested incl. against a real edge; UI typechecked only, never run on a device |
+| 6 Hardening/ops | ⛔ not done: no Pi install test, no 24 h soak, no TLS, no backups/restore |
 
 ## What works now
 
@@ -26,7 +37,9 @@ keep a copy at the repo root). This README says what actually exists today.
 Requirements: Go ≥ 1.24, `mosquitto` (`apt install mosquitto`). No cloud account, no internet needed.
 
 ```bash
-make test               # contracts + edge + simulator unit/handler tests
+make test               # contracts + edge + cloud (needs PostgreSQL binaries) + simulator
+make fw-test            # firmware portable core (gcc) + Go validates its output
+make web-test           # dashboard typecheck + tests (pnpm)
 make test-race          # same with the race detector
 make test-integration   # real Mosquitto + real edge binary (SIGKILL-able) + simulated fleet (~1 min)
 make web-build         # build the dashboard (needs pnpm)
@@ -67,7 +80,8 @@ simulator             esp32/ (device model), seed/ (dev provisioning), cmd/
 tests/integration     real-broker scenarios + opt-in load test
 infrastructure/       raspberry-pi/ (systemd + Mosquitto config: UNVALIDATED on a Pi), development/
 docs/                 decisions/ (ADR), architecture/, development/status.md, performance/
-apps/web (dashboard)   ▫ apps/mobile  ▫ services/cloud-api  ▫ firmware/esp32  ▫ packages  ▫ infrastructure/cloud
+apps/web (dashboard; local + cloud builds)  apps/mobile (Expo)  services/cloud-api (Go + PostgreSQL)  firmware/esp32  contracts/sync
+▫ packages (shared TS packages: not extracted yet; web and mobile each carry small copies of the API types)  ▫ infrastructure/cloud (no Compose/Docker yet)
 ```
 
 ## Safety and honesty rules baked into the code

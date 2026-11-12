@@ -17,6 +17,7 @@ import (
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/devices"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/diagnostics"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/incidents"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/pairing"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/roles"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/storage"
 	edgesync "github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sync"
@@ -30,6 +31,8 @@ func (s *Server) register() {
 	s.handle("GET", "/healthz", s.healthz)
 	s.handle("GET", "/readyz", s.readyz)
 	s.handle("POST", "/api/v1/local/auth/login", s.login)
+	s.handle("GET", "/api/v1/identity", s.identity)
+	s.handle("POST", "/api/v1/site-pairing/confirm", s.pairConfirm)
 
 	// ---- session & identity
 	s.protected("POST", "/api/v1/local/auth/logout", "", s.logout)
@@ -62,6 +65,7 @@ func (s *Server) register() {
 	s.protected("GET", "/api/v1/sites/{siteId}/storage", roles.ViewData, s.storageInfo)
 	s.protected("GET", "/api/v1/sites/{siteId}/audit", roles.ViewAudit, s.auditLog)
 	s.protected("GET", "/api/v1/diagnostics", roles.ViewDiagnostics, s.diag)
+	s.protected("POST", "/api/v1/site-pairing/start", roles.ManageDevices, s.pairStart)
 
 	s.mux.Handle("/", s.staticHandler())
 }
@@ -757,4 +761,62 @@ func (s *Server) cloudDetail(pending int64) map[string]any {
 		m["reachable"], m["last_sync_at"], m["last_error"], m["consecutive_failures"], m["rejected_items_dropped"] = st.Reachable, st.LastSyncAt, st.LastError, st.ConsecutiveFailures, st.RejectedItems
 	}
 	return m
+}
+
+// ---------------------------------------------------------------- identity & pairing (mobile)
+
+// identity answers a caller-chosen challenge with a signature from the site key. It is unauthenticated on
+// purpose (the phone must verify the Pi BEFORE sending credentials) and reveals only the opaque site id
+// and the public key. Cheap enough to be safe; the per-IP limiter bounds abuse.
+func (s *Server) identity(w http.ResponseWriter, r *http.Request) {
+	if s.Pairing == nil {
+		writeError(w, r, 404, "NOT_FOUND", "identity not available", nil)
+		return
+	}
+	ch := r.URL.Query().Get("challenge")
+	sig, err := s.Pairing.Sign(ch)
+	if err != nil {
+		writeError(w, r, 400, "VALIDATION_FAILED", err.Error(), map[string]any{"field": "challenge"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"site_id": s.Cfg.SiteID, "site_name": s.Cfg.SiteName, "public_key": s.Pairing.PublicKey(), "signature": sig, "scheme": "ed25519/aerolab-identity-v1"})
+}
+
+func (s *Server) pairStart(w http.ResponseWriter, r *http.Request, u auth.User) {
+	code, exp, err := s.Pairing.Start(r.Context(), u.ID)
+	if errors.Is(err, pairing.ErrTooMany) {
+		writeError(w, r, 429, "RATE_LIMITED", "too many unused pairing codes; wait for them to expire", nil)
+		return
+	}
+	if err != nil {
+		s.mapErr(w, r, err)
+		return
+	}
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	payload, _ := json.Marshal(map[string]any{"v": 1, "site": s.Cfg.SiteID, "name": s.Cfg.SiteName, "pk": s.Pairing.PublicKey(), "hints": []string{scheme + "://" + r.Host}, "code": code})
+	writeJSON(w, 201, map[string]any{"code": code, "expires_at": storage.FormatTime(exp), "qr_payload": string(payload),
+		"note": "Single use, valid 5 minutes. The QR carries no long-term secret; the phone still needs a local login."})
+}
+
+func (s *Server) pairConfirm(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Code       string `json:"code"`
+		DeviceName string `json:"device_name"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	switch err := s.Pairing.Confirm(r.Context(), in.Code, in.DeviceName, clientIP(r)); {
+	case errors.Is(err, pairing.ErrRateLimited):
+		writeError(w, r, 429, "RATE_LIMITED", "too many attempts; try again later", nil)
+	case errors.Is(err, pairing.ErrInvalidCode):
+		writeError(w, r, 401, "UNAUTHORIZED", "invalid or expired pairing code", nil)
+	case err != nil:
+		s.mapErr(w, r, err)
+	default:
+		writeJSON(w, 200, map[string]any{"site_id": s.Cfg.SiteID, "site_name": s.Cfg.SiteName, "public_key": s.Pairing.PublicKey()})
+	}
 }

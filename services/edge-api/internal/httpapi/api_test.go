@@ -21,6 +21,7 @@ import (
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/config"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/devices"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/diagnostics"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/pairing"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/roles"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sse"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/storage"
@@ -54,7 +55,11 @@ func newEnv(t *testing.T) *env {
 	a := auth.New(db, cfg.SiteID)
 	cm := commands.New(db, reg, pub, hub, commands.Options{SiteID: cfg.SiteID, StaleAfter: cfg.StaleAfter, Retry: time.Second, MaxTries: 3, TTL: time.Minute}, testutil.Logger())
 	w := telemetry.NewWriter(db, pub, hub, m, testutil.Logger(), cfg.SiteID, 16, false)
-	s := New(Deps{Cfg: cfg, DB: db, Auth: a, Reg: reg, Cmds: cm, Hub: hub, Metrics: m, Writer: w, MQTT: mqttUp{}, Static: static.FS, Log: testutil.Logger()})
+	pr, err := pairing.Ensure(context.Background(), db, cfg.SiteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(Deps{Cfg: cfg, DB: db, Auth: a, Reg: reg, Cmds: cm, Hub: hub, Metrics: m, Writer: w, MQTT: mqttUp{}, Pairing: pr, Static: static.FS, Log: testutil.Logger()})
 	e := &env{srv: s, h: s.Handler(), db: db, reg: reg, pub: pub, auth: a, toks: map[roles.Role]string{}}
 	ctx := context.Background()
 	for _, r := range []roles.Role{roles.Admin, roles.Operator, roles.Viewer} {
@@ -180,6 +185,7 @@ func TestRBACMatrixIsEnforcedByTheServer(t *testing.T) {
 		{"PATCH", "/api/v1/local/users/nope", map[string]any{"disabled": true}, []roles.Role{A}},
 		{"GET", "/api/v1/sites/site-test-01/audit", nil, []roles.Role{A}},
 		{"GET", "/api/v1/diagnostics", nil, []roles.Role{A}},
+		{"POST", "/api/v1/site-pairing/start", nil, []roles.Role{A}},
 	}
 	for _, c := range cases {
 		// no credentials at all
@@ -516,5 +522,49 @@ func TestSSEStreamRequiresAuthAndDeliversTypedEvents(t *testing.T) {
 	}
 	if d := wait("data: "); !strings.Contains(d, `"id":"x"`) {
 		t.Fatalf("payload %q", d)
+	}
+}
+
+func TestIdentityAndPairingEndpointsEndToEnd(t *testing.T) {
+	e := newEnv(t)
+	c := "QUJDREVGR0hJSktMTU5PUA" // 16 bytes
+	var id struct {
+		SiteID, PublicKey, Signature string `json:"-"`
+		Site                         string `json:"site_id"`
+		Pub                          string `json:"public_key"`
+		Sig                          string `json:"signature"`
+	}
+	w := e.do("GET", "/api/v1/identity?challenge="+c, "", nil) // unauthenticated by design
+	if w.Code != 200 {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &id)
+	if !pairing.VerifyIdentity(id.Pub, id.Site, c, id.Sig) || id.Site != "site-test-01" {
+		t.Fatalf("a phone could not verify the Pi's proof: %+v", id)
+	}
+	if e.do("GET", "/api/v1/identity", "", nil).Code != 400 || e.do("GET", "/api/v1/identity?challenge=short", "", nil).Code != 400 {
+		t.Fatal("missing/short challenge accepted")
+	}
+	// admin starts pairing; the QR carries NO long-term secret and the code works once
+	w = e.do("POST", "/api/v1/site-pairing/start", e.toks[roles.Admin], nil)
+	var st struct {
+		Code    string `json:"code"`
+		Payload string `json:"qr_payload"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &st)
+	if w.Code != 201 || st.Code == "" || strings.Contains(st.Payload, e.toks[roles.Admin]) {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	var qr map[string]any
+	_ = json.Unmarshal([]byte(st.Payload), &qr)
+	if qr["site"] != "site-test-01" || qr["pk"] != id.Pub || qr["code"] != st.Code || qr["v"] != float64(1) {
+		t.Fatalf("qr payload %v", qr)
+	}
+	body := map[string]any{"code": st.Code, "device_name": "Pixel 8"}
+	if w := e.do("POST", "/api/v1/site-pairing/confirm", "", body); w.Code != 200 || !strings.Contains(w.Body.String(), id.Pub) {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	if w := e.do("POST", "/api/v1/site-pairing/confirm", "", body); w.Code != 401 {
+		t.Fatalf("code reused: %d", w.Code)
 	}
 }

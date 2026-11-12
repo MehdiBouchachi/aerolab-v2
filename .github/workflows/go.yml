@@ -14,6 +14,8 @@ jobs:
         with: { go-version-file: go.work, cache-dependency-path: "**/go.sum" }
       - name: install Mosquitto (real broker for integration tests)
         run: sudo apt-get update && sudo apt-get install -y mosquitto && sudo systemctl disable --now mosquitto
+      - name: install PostgreSQL (cloud API tests start a throw-away cluster)
+        run: sudo apt-get install -y postgresql && sudo systemctl disable --now postgresql
       - run: make lint
       - run: make test-race
       - run: make test-integration
@@ -36,3 +38,12 @@ jobs:
         with: { node-version: 22 }
       - run: make web-test
       - run: make web-build
+  mobile:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: cd apps/mobile && pnpm install && pnpm typecheck && pnpm test

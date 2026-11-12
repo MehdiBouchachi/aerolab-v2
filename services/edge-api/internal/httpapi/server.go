@@ -23,6 +23,7 @@ import (
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/config"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/devices"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/diagnostics"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/pairing"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/roles"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sse"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/storage"
@@ -48,6 +49,7 @@ type Deps struct {
 	Writer  *telemetry.Writer
 	MQTT    MQTTStatus
 	Cloud   CloudLink // nil when cloud sync is disabled
+	Pairing *pairing.Service
 	Static  fs.FS
 	Log     *slog.Logger
 }
