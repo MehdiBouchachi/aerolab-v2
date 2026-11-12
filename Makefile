@@ -27,7 +27,7 @@ web-build-cloud: ## build the dashboard for the CLOUD origin into apps/web/dist-
 	cd apps/web && pnpm install --frozen-lockfile=false && VITE_SOURCE=cloud pnpm build --outDir dist-cloud
 
 web-test: ## dashboard typecheck + unit tests
-	cd apps/web && pnpm typecheck && pnpm test
+	cd apps/web && pnpm install --frozen-lockfile=false && pnpm typecheck && pnpm test
 
 pi-arm64: ## cross-compile the edge for Raspberry Pi 5 (pure Go, no CGO)
 	mkdir -p bin
