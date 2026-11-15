@@ -37,7 +37,7 @@ func newCloud(t *testing.T) *fakeCloud {
 		defer f.mu.Unlock()
 		f.auth = r.Header.Get("Authorization")
 		if f.down {
-			http.Error(w, "down", 503)
+			http.Error(w, "down", http.StatusServiceUnavailable)
 			return
 		}
 		switch r.URL.Path {
@@ -365,5 +365,71 @@ func TestRemoteIntentAppliedOnlyAfterControllerConfirms(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("APPLIED reported %d times", n)
+	}
+}
+
+func TestUnchangedStateIsNotReUploadedEveryCycle(t *testing.T) {
+	r := newRig(t, false)
+	fp := "fp-1"
+	r.w.state = func(context.Context) (sc.State, error) {
+		return sc.State{ObservedAt: storage.Now(), Fingerprint: fp}, nil
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := r.w.cycle(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b, _ := r.f.take()
+	if len(b) != 3 || b[0].State == nil || b[1].State != nil || b[2].State != nil {
+		t.Fatalf("an unchanged state must be sent once, then omitted (batches still sent as heartbeats): %v %v %v", b[0].State != nil, b[1].State != nil, b[2].State != nil)
+	}
+	fp = "fp-2" // something real changed
+	_, _ = r.w.cycle(context.Background())
+	if b, _ = r.f.take(); b[3].State == nil {
+		t.Fatal("a changed state was not sent")
+	}
+	r.w.lastSentAt = time.Now().Add(-StateResend) // due for the periodic resend
+	_, _ = r.w.cycle(context.Background())
+	if b, _ = r.f.take(); b[4].State == nil {
+		t.Fatal("periodic resend missing")
+	}
+	// after a failed upload the next success carries the state again even if unchanged
+	r.f.mu.Lock()
+	r.f.down = true
+	r.f.mu.Unlock()
+	_, _ = r.w.cycle(context.Background())
+	r.f.mu.Lock()
+	r.f.down = false
+	r.f.mu.Unlock()
+	_, _ = r.w.cycle(context.Background())
+	if b, _ = r.f.take(); b[len(b)-1].State == nil {
+		t.Fatal("state not re-sent after a failure")
+	}
+}
+
+// A brief controller outage must not turn a valid remote request into a rejection: it waits (PENDING_SITE)
+// and is applied once the controller is back, or expires on its own.
+func TestRemoteIntentWaitsWhileControllerIsOfflineThenProceeds(t *testing.T) {
+	r := newRig(t, true)
+	// no heartbeat yet: the controller is not reporting
+	r.intent("cmd-remote-0100", 0, nil)
+	if _, err := r.w.cycle(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, res := r.f.take(); len(res) != 0 {
+		t.Fatalf("a transient DEVICE_OFFLINE was reported to the cloud as final: %+v", res)
+	}
+	var n int
+	_ = r.db.R.QueryRow(`SELECT COUNT(*) FROM commands`).Scan(&n)
+	if n != 0 {
+		t.Fatal("a command was created for an offline controller")
+	}
+	// the cloud offers it again next cycle; now the controller is back
+	r.heartbeat(0)
+	r.intent("cmd-remote-0100", 0, nil)
+	_, _ = r.w.cycle(context.Background())
+	_, _ = r.w.cycle(context.Background())
+	if res := r.lastResult(t, "cmd-remote-0100"); res.Status != sc.IntentPendingDevice {
+		t.Fatalf("%+v", res)
 	}
 }

@@ -45,7 +45,7 @@ func EnqueueIncident(ctx context.Context, tx *sql.Tx, siteID string, inc inciden
 	changed := time.Now().UTC().Format(time.RFC3339Nano)
 	u := sc.IncidentUpdate{ID: inc.ID, UnitID: inc.UnitID, Severity: string(inc.Severity), Code: inc.Code, Status: inc.Status, Title: inc.Title, Cause: inc.Cause,
 		SuggestedAction: inc.SuggestedAction, FirstSeenAt: inc.FirstSeenAt, LastSeenAt: inc.LastSeenAt, Occurrences: inc.Occurrences,
-		AcknowledgedBy: inc.AcknowledgedBy, AcknowledgedAt: inc.AcknowledgedAt, ResolvedAt: inc.ResolvedAt, ChangedAt: changed}
+		AcknowledgedBy: inc.AcknowledgedBy, AcknowledgedAt: inc.AcknowledgedAt, ResolvedAt: inc.ResolvedAt, Note: inc.Note, ChangedAt: changed}
 	b, err := json.Marshal(u)
 	if err != nil {
 		return err

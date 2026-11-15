@@ -1,0 +1,15 @@
+BenchmarkCommitBatch100-4   	     260	   4359881 ns/op	     22936 records/s	  255672 B/op	    3946 allocs/op
+BenchmarkCommitBatch100-4   	     271	   4436355 ns/op	     22541 records/s	  255583 B/op	    3946 allocs/op
+BenchmarkCommitBatch100-4   	     256	   4124110 ns/op	     24248 records/s	  255524 B/op	    3946 allocs/op
+BenchmarkCommitBatch100-4   	     253	   4479097 ns/op	     22326 records/s	  255587 B/op	    3946 allocs/op
+BenchmarkCommitBatch100-4   	     270	   4259291 ns/op	     23478 records/s	  255555 B/op	    3946 allocs/op
+BenchmarkListUnits20-4   	     985	   1395996 ns/op	  122049 B/op	    2380 allocs/op
+BenchmarkListUnits20-4   	     973	   1355408 ns/op	  121390 B/op	    2380 allocs/op
+BenchmarkListUnits20-4   	     916	   1439716 ns/op	  121865 B/op	    2380 allocs/op
+BenchmarkListUnits20-4   	    1026	   1213044 ns/op	  121999 B/op	    2380 allocs/op
+BenchmarkListUnits20-4   	    1020	   1197887 ns/op	  122333 B/op	    2380 allocs/op
+BenchmarkSnapshot20-4    	     999	   1247044 ns/op	  110583 B/op	    2288 allocs/op
+BenchmarkSnapshot20-4    	     889	   1176299 ns/op	  110591 B/op	    2288 allocs/op
+BenchmarkSnapshot20-4    	    1028	   1200554 ns/op	  110600 B/op	    2288 allocs/op
+BenchmarkSnapshot20-4    	    1016	   1177445 ns/op	  110596 B/op	    2288 allocs/op
+BenchmarkSnapshot20-4    	    1051	   1136412 ns/op	  110598 B/op	    2288 allocs/op

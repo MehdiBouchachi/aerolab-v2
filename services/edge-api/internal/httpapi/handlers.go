@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	mc "github.com/mehdibouchachi/aerolab-v2/contracts/mqtt"
@@ -235,6 +236,26 @@ type readingView struct {
 	Readings    map[string]mc.Reading `json:"readings"`
 }
 
+// readingFromRow builds the API view of one stored snapshot. An old snapshot is flagged
+// and every value marked outdated: an old value is never presented as current.
+func readingFromRow(eff, recv, tq, src, rj string, now time.Time) (*readingView, error) {
+	v := &readingView{EffectiveAt: eff, ReceivedAt: recv, TimeQuality: tq, Source: src}
+	if t, e := time.Parse(storage.TimeFormat, eff); e == nil {
+		v.AgeSeconds = int64(now.Sub(t).Seconds())
+		v.Outdated = now.Sub(t) > readingStaleAfter
+	}
+	if err := json.Unmarshal([]byte(rj), &v.Readings); err != nil {
+		return nil, err
+	}
+	if v.Outdated {
+		for k, rd := range v.Readings {
+			rd.Quality = mc.QualityOutdated
+			v.Readings[k] = rd
+		}
+	}
+	return v, nil
+}
+
 func (s *Server) latestReading(ctx context.Context, unitID string) (*readingView, error) {
 	var eff, recv, tq, src, rj string
 	err := s.DB.R.QueryRowContext(ctx, `SELECT effective_at_utc,received_at_utc,time_quality,source,readings_json FROM telemetry_snapshots WHERE unit_id=? ORDER BY effective_at_utc DESC LIMIT 1`, unitID).
@@ -245,69 +266,109 @@ func (s *Server) latestReading(ctx context.Context, unitID string) (*readingView
 	if err != nil {
 		return nil, err
 	}
-	v := &readingView{EffectiveAt: eff, ReceivedAt: recv, TimeQuality: tq, Source: src}
-	if t, e := time.Parse(storage.TimeFormat, eff); e == nil {
-		v.AgeSeconds = int64(time.Since(t).Seconds())
-		v.Outdated = time.Since(t) > readingStaleAfter
+	return readingFromRow(eff, recv, tq, src, rj, time.Now())
+}
+
+type unitRef struct{ id, name, dev string }
+
+// unitBase fills everything that comes from the in-memory registry (no database access).
+func (s *Server) unitBase(ref unitRef, now time.Time) unitView {
+	v := unitView{ID: ref.id, SiteID: s.Cfg.SiteID, Name: ref.name, DeviceID: ref.dev, Connection: string(devices.ConnNeverSeen), FaultCodes: []string{}, ActiveIncidents: map[string]int{}}
+	rt, ok := s.Reg.ByUnit(ref.id)
+	if !ok {
+		return v
 	}
-	if err := json.Unmarshal([]byte(rj), &v.Readings); err != nil {
+	v.DataSource, v.IsSimulated = rt.DataSource, rt.DataSource == string(mc.SourceSimulator)
+	conn := rt.Connection(now, s.Cfg.StaleAfter)
+	v.Connection = string(conn)
+	if !rt.Seen {
+		return v
+	}
+	ls := storage.FormatTime(rt.StateAt)
+	v.LastStateAt = &ls
+	st := rt.State
+	v.AppliedProgram = st.ProgramVersionApplied
+	fw := st.FirmwareVersion
+	v.FirmwareVersion = &fw
+	v.Buffer = &st.Buffer
+	if conn == devices.ConnOnline {
+		cs, pc, wd, il := string(st.ControlState), st.PumpCommanded, st.WaterDelivery, st.EssentialInterlocksOK
+		v.ControlState, v.PumpCommanded, v.WaterDelivery, v.EssentialInterlocks = &cs, &pc, &wd, &il
+		v.FaultCodes = append([]string{}, st.FaultCodes...)
+	} else {
+		// stale: show the last known state only as outdated, never as current
+		cs := "UNKNOWN_STALE"
+		v.ControlState = &cs
+		v.ControlStateNote = "Controller is not reporting. Last known state was " + string(st.ControlState) + " at " + ls + ". This does not prove the pump stopped."
+	}
+	return v
+}
+
+// buildUnits assembles views for a page of units with TWO queries in total (active incident counts and
+// latest snapshots for the whole page), instead of two queries per unit. Both stay index-driven:
+// ix_incident_open and ix_telemetry_unit_time (one LIMIT 1 seek per unit inside the statement).
+func (s *Server) buildUnits(ctx context.Context, refs []unitRef, withReadings bool) ([]unitView, error) {
+	now := time.Now()
+	out := make([]unitView, len(refs))
+	idx := make(map[string]int, len(refs))
+	if len(refs) == 0 {
+		return out, nil
+	}
+	ph := make([]string, len(refs))
+	args := make([]any, 0, len(refs)+1)
+	args = append(args, s.Cfg.SiteID)
+	for i, r := range refs {
+		out[i] = s.unitBase(r, now)
+		idx[r.id] = i
+		ph[i] = "?"
+		args = append(args, r.id)
+	}
+	in := strings.Join(ph, ",")
+	rows, err := s.DB.R.QueryContext(ctx, `SELECT unit_id, severity, COUNT(*) FROM incidents WHERE site_id=? AND status LIKE 'ACTIVE%' AND unit_id IN (`+in+`) GROUP BY 1,2`, args...)
+	if err != nil {
 		return nil, err
 	}
-	if v.Outdated { // never present an old value as current
-		for k, rd := range v.Readings {
-			rd.Quality = mc.QualityOutdated
-			v.Readings[k] = rd
+	for rows.Next() {
+		var u, sev string
+		var n int
+		if rows.Scan(&u, &sev, &n) == nil {
+			out[idx[u]].ActiveIncidents[sev] = n
 		}
 	}
-	return v, nil
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if !withReadings {
+		return out, nil
+	}
+	rows, err = s.DB.R.QueryContext(ctx, `SELECT g.id, t.effective_at_utc, t.received_at_utc, t.time_quality, t.source, t.readings_json
+		FROM growing_units g JOIN telemetry_snapshots t
+		  ON t.rowid = (SELECT rowid FROM telemetry_snapshots WHERE unit_id = g.id ORDER BY effective_at_utc DESC LIMIT 1)
+		WHERE g.site_id=? AND g.id IN (`+in+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var u, eff, recv, tq, src, rj string
+		if err := rows.Scan(&u, &eff, &recv, &tq, &src, &rj); err != nil {
+			return nil, err
+		}
+		rv, err := readingFromRow(eff, recv, tq, src, rj, now)
+		if err != nil {
+			return nil, err
+		}
+		out[idx[u]].LatestReadings = rv
+	}
+	return out, rows.Err()
 }
 
 func (s *Server) buildUnit(ctx context.Context, id, name, deviceID string, withReadings bool) (unitView, error) {
-	now := time.Now()
-	v := unitView{ID: id, SiteID: s.Cfg.SiteID, Name: name, DeviceID: deviceID, Connection: string(devices.ConnNeverSeen), FaultCodes: []string{}, ActiveIncidents: map[string]int{}}
-	if rt, ok := s.Reg.ByUnit(id); ok {
-		v.DataSource, v.IsSimulated = rt.DataSource, rt.DataSource == string(mc.SourceSimulator)
-		conn := rt.Connection(now, s.Cfg.StaleAfter)
-		v.Connection = string(conn)
-		if rt.Seen {
-			ls := storage.FormatTime(rt.StateAt)
-			v.LastStateAt = &ls
-			st := rt.State
-			applied := st.ProgramVersionApplied
-			v.AppliedProgram = applied
-			fw := st.FirmwareVersion
-			v.FirmwareVersion = &fw
-			v.Buffer = &st.Buffer
-			if conn == devices.ConnOnline {
-				cs, pc, wd, il := string(st.ControlState), st.PumpCommanded, st.WaterDelivery, st.EssentialInterlocksOK
-				v.ControlState, v.PumpCommanded, v.WaterDelivery, v.EssentialInterlocks = &cs, &pc, &wd, &il
-				v.FaultCodes = append([]string{}, st.FaultCodes...)
-			} else {
-				// stale: show the last known state only as outdated, never as current
-				cs := "UNKNOWN_STALE"
-				v.ControlState = &cs
-				v.ControlStateNote = "Controller is not reporting. Last known state was " + string(st.ControlState) + " at " + ls + ". This does not prove the pump stopped."
-			}
-		}
-	}
-	rows, err := s.DB.R.QueryContext(ctx, `SELECT severity, COUNT(*) FROM incidents WHERE unit_id=? AND status LIKE 'ACTIVE%' GROUP BY severity`, id)
+	v, err := s.buildUnits(ctx, []unitRef{{id, name, deviceID}}, withReadings)
 	if err != nil {
-		return v, err
+		return unitView{}, err
 	}
-	for rows.Next() {
-		var sev string
-		var n int
-		if rows.Scan(&sev, &n) == nil {
-			v.ActiveIncidents[sev] = n
-		}
-	}
-	rows.Close()
-	if withReadings {
-		if v.LatestReadings, err = s.latestReading(ctx, id); err != nil {
-			return v, err
-		}
-	}
-	return v, nil
+	return v[0], nil
 }
 
 func (s *Server) listUnits(w http.ResponseWriter, r *http.Request, u auth.User) {
@@ -327,23 +388,18 @@ func (s *Server) listUnits(w http.ResponseWriter, r *http.Request, u auth.User) 
 		s.mapErr(w, r, err)
 		return
 	}
-	type row struct{ id, name, dev string }
-	var rs []row
+	var rs []unitRef
 	for rows.Next() {
-		var x row
+		var x unitRef
 		if rows.Scan(&x.id, &x.name, &x.dev) == nil {
 			rs = append(rs, x)
 		}
 	}
 	rows.Close()
-	out := make([]unitView, 0, len(rs))
-	for _, x := range rs {
-		v, err := s.buildUnit(r.Context(), x.id, x.name, x.dev, true)
-		if err != nil {
-			s.mapErr(w, r, err)
-			return
-		}
-		out = append(out, v)
+	out, err := s.buildUnits(r.Context(), rs, true)
+	if err != nil {
+		s.mapErr(w, r, err)
+		return
 	}
 	var total int
 	_ = s.DB.R.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM growing_units WHERE site_id=? AND name LIKE ?`, s.Cfg.SiteID, "%"+name+"%").Scan(&total)

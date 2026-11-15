@@ -213,45 +213,54 @@ func (a *App) Run(ctx context.Context) error {
 	return err
 }
 
-// retention keeps the database bounded (spec 11.4: 30-day target) and the WAL small.
+// retention keeps the database bounded (spec 11.4: 30-day target) and the WAL small. It runs one minute
+// after start (a Pi that reboots daily would otherwise never prune) and then hourly.
 func (a *App) retention(ctx context.Context) {
-	run := func() {
-		cut := storage.FormatTime(time.Now().Add(-time.Duration(a.Cfg.RetentionDays) * 24 * time.Hour))
-		for _, t := range []string{"telemetry_snapshots", "device_events"} {
-			for { // short transactions, never one giant delete
-				res, err := a.DB.W.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE rowid IN (SELECT rowid FROM %s WHERE received_at_utc < ? LIMIT 5000)`, t, t), cut)
-				if err != nil {
-					a.Log.Error("retention delete", "table", t, "err", err)
-					break
-				}
-				if n, _ := res.RowsAffected(); n < 5000 {
-					break
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(50 * time.Millisecond):
-				}
-			}
-		}
-		_, _ = a.DB.W.ExecContext(ctx, `DELETE FROM local_sessions WHERE absolute_expires_at < ? OR expires_at < ?`, storage.Now(), storage.Now())
-		if d, err := edgesync.Trim(ctx, a.DB.W); err != nil {
-			a.Log.Error("outbox trim", "err", err)
-		} else if d > 0 {
-			a.Log.Warn("outbox over capacity: dropped lowest-priority rows", "dropped", d)
-		}
-		if err := a.DB.Checkpoint(ctx); err != nil {
-			a.Log.Warn("wal checkpoint", "err", err)
-		}
-	}
+	first := time.NewTimer(time.Minute)
+	defer first.Stop()
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-first.C:
+			a.RetentionOnce(ctx)
 		case <-t.C:
-			run()
+			a.RetentionOnce(ctx)
 		}
+	}
+}
+
+// RetentionOnce deletes telemetry/events older than the retention window in short transactions,
+// expired sessions and acknowledged outbox rows, then checkpoints the WAL.
+func (a *App) RetentionOnce(ctx context.Context) {
+	cut := storage.FormatTime(time.Now().Add(-time.Duration(a.Cfg.RetentionDays) * 24 * time.Hour))
+	for _, t := range []string{"telemetry_snapshots", "device_events"} {
+		for { // short transactions, never one giant delete
+			res, err := a.DB.W.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE rowid IN (SELECT rowid FROM %s WHERE received_at_utc < ? LIMIT 5000)`, t, t), cut)
+			if err != nil {
+				a.Log.Error("retention delete", "table", t, "err", err)
+				break
+			}
+			if n, _ := res.RowsAffected(); n < 5000 {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+	}
+	_, _ = a.DB.W.ExecContext(ctx, `DELETE FROM local_sessions WHERE absolute_expires_at < ? OR expires_at < ?`, storage.Now(), storage.Now())
+	_, _ = a.DB.W.ExecContext(ctx, `DELETE FROM pairing_codes WHERE expires_at < ?`, storage.FormatTime(time.Now().Add(-24*time.Hour)))
+	if d, err := edgesync.Trim(ctx, a.DB.W); err != nil {
+		a.Log.Error("outbox trim", "err", err)
+	} else if d > 0 {
+		a.Log.Warn("outbox over capacity: dropped lowest-priority rows", "dropped", d)
+	}
+	if err := a.DB.Checkpoint(ctx); err != nil {
+		a.Log.Warn("wal checkpoint", "err", err)
 	}
 }

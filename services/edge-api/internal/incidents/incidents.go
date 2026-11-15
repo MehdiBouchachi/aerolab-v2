@@ -10,6 +10,7 @@ package incidents
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"sort"
 
@@ -72,9 +73,10 @@ type Incident struct {
 	AcknowledgedBy  *string     `json:"acknowledged_by"`
 	AcknowledgedAt  *string     `json:"acknowledged_at"`
 	ResolvedAt      *string     `json:"resolved_at"`
+	Note            string      `json:"note,omitempty"` // e.g. reconstructed after an outage
 }
 
-const cols = `id,site_id,unit_id,severity,code,status,first_seen_at,last_seen_at,occurrences,acknowledged_by,acknowledged_at,resolved_at`
+const cols = `id,site_id,unit_id,severity,code,status,first_seen_at,last_seen_at,occurrences,acknowledged_by,acknowledged_at,resolved_at,details_json`
 
 type scanner interface{ Scan(...any) error }
 
@@ -82,7 +84,8 @@ func scan(r scanner) (Incident, error) {
 	var i Incident
 	var sev string
 	var ab, aa, ra sql.NullString
-	if err := r.Scan(&i.ID, &i.SiteID, &i.UnitID, &sev, &i.Code, &i.Status, &i.FirstSeenAt, &i.LastSeenAt, &i.Occurrences, &ab, &aa, &ra); err != nil {
+	var details string
+	if err := r.Scan(&i.ID, &i.SiteID, &i.UnitID, &sev, &i.Code, &i.Status, &i.FirstSeenAt, &i.LastSeenAt, &i.Occurrences, &ab, &aa, &ra, &details); err != nil {
 		return i, err
 	}
 	i.Severity = mc.Severity(sev)
@@ -97,6 +100,16 @@ func scan(r scanner) (Incident, error) {
 	}
 	d := Describe(i.Code)
 	i.Title, i.Cause, i.SuggestedAction = d.Title, d.Cause, d.Action
+	var det struct {
+		Reconstructed bool   `json:"reconstructed_from_events"`
+		TimeQuality   string `json:"time_quality"`
+	}
+	if json.Unmarshal([]byte(details), &det) == nil && det.Reconstructed {
+		i.Note = "Reconstructed from controller events delivered after a connection outage: the fault started and ended while the site could not be observed live."
+		if det.TimeQuality != "DEVICE_CLOCK" {
+			i.Note += " Its times are approximate (" + det.TimeQuality + ")."
+		}
+	}
 	return i, nil
 }
 
@@ -299,4 +312,33 @@ func CountActive(ctx context.Context, db *sql.DB, siteID string) (critical, warn
 	}
 	err = rows.Err()
 	return
+}
+
+// ReconstructFromEvents records a fault that was RAISED and CLEARED entirely while the site could not be
+// observed live (e.g. the Pi or broker was down): the heartbeat never showed it, but the controller journaled
+// both events and replayed them. It creates a RESOLVED incident with the events' own times unless an incident
+// for the same unit+code already covers any part of that interval (the live path saw it). Idempotent.
+func ReconstructFromEvents(ctx context.Context, tx *sql.Tx, siteID, unitID, code, raisedAt, clearedAt, timeQuality string) (*Change, error) {
+	if code == mc.FaultNoProgram || clearedAt < raisedAt {
+		return nil, nil
+	}
+	var n int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM incidents WHERE unit_id=? AND code=? AND first_seen_at <= ? AND (resolved_at IS NULL OR resolved_at >= ?)`,
+		unitID, code, clearedAt, raisedAt).Scan(&n); err != nil {
+		return nil, err
+	}
+	if n > 0 {
+		return nil, nil
+	}
+	det, _ := json.Marshal(map[string]any{"reconstructed_from_events": true, "time_quality": timeQuality})
+	id := auth.NewID()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO incidents(id,site_id,unit_id,severity,code,status,first_seen_at,last_seen_at,resolved_at,details_json) VALUES (?,?,?,?,?,'RESOLVED_UNACKNOWLEDGED',?,?,?,?)`,
+		id, siteID, unitID, string(Describe(code).Severity), code, raisedAt, clearedAt, clearedAt, string(det)); err != nil {
+		return nil, err
+	}
+	inc, err := scan(tx.QueryRowContext(ctx, `SELECT `+cols+` FROM incidents WHERE id=?`, id))
+	if err != nil {
+		return nil, err
+	}
+	return &Change{inc}, nil
 }

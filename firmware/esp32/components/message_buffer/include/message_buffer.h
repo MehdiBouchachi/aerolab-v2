@@ -47,6 +47,11 @@ int mb_reclaim(mb_t *m, const char *boot, const int64_t *seqs, int n); /* return
  * then oldest. Respects max_inflight (sent but unreceipted within resend_ms). Marks them sent. */
 int mb_next_batch(mb_t *m, uint64_t now_ms, uint32_t resend_ms, int limit, int max_inflight, int *slots_out);
 int mb_read(mb_t *m, int slot, char *buf, size_t cap);
+/* After a reboot the payloads are still in flash but the RAM index is empty. Re-register the record already
+ * stored in `slot` (no backend write): boot_id, seq and criticality are read back from the payload itself.
+ * Returns 0, or <0 if the slot is invalid/occupied or the payload is unreadable (caller then deletes it).
+ * Replay order across boots is by restore order; the Pi deduplicates by (device, boot, seq) anyway. */
+int mb_restore(mb_t *m, int slot, const char *data, size_t len);
 int mb_occupancy(const mb_t *m);
 
 #ifdef __cplusplus

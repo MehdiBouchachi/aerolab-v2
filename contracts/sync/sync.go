@@ -66,6 +66,12 @@ type State struct {
 	SiteName     string            `json:"site_name"`
 	Connectivity Connectivity      `json:"connectivity"`
 	Units        []json.RawMessage `json:"units"`
+	// UnitsComplete: Units is the FULL list of the site's units, so the cloud may drop units that are
+	// absent. False (or missing, e.g. an older edge) means "partial": the cloud then deletes nothing.
+	UnitsComplete bool `json:"units_complete"`
+	// Fingerprint (never sent) identifies the meaningful content, ignoring clock-driven fields such as a
+	// reading's age, so the edge can skip re-uploading an unchanged snapshot.
+	Fingerprint string `json:"-"`
 }
 
 type Connectivity struct {
@@ -102,6 +108,7 @@ type IncidentUpdate struct {
 	AcknowledgedBy  *string `json:"acknowledged_by"`
 	AcknowledgedAt  *string `json:"acknowledged_at"`
 	ResolvedAt      *string `json:"resolved_at"`
+	Note            string  `json:"note,omitempty"`
 	ChangedAt       string  `json:"changed_at"`
 }
 

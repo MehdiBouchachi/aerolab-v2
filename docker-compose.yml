@@ -27,12 +27,14 @@ services:
     profiles: [cloud]
     build: { context: ., target: cloud }
     depends_on: { postgres: { condition: service_healthy } }
-    ports: ["${AEROLAB_CLOUD_PORT:-8090}:8090"]
+    # loopback only by default: put a TLS reverse proxy in front before exposing the cloud
+    ports: ["${AEROLAB_CLOUD_BIND:-127.0.0.1}:${AEROLAB_CLOUD_PORT:-8090}:8090"]
     environment:
       AEROLAB_CLOUD_DATABASE_URL: "postgres://aerolab:${POSTGRES_PASSWORD:-aerolab-dev-only}@postgres:5432/aerolab?sslmode=disable"
       AEROLAB_CLOUD_COOKIE_SECURE: "false"   # plain HTTP on localhost only; keep "true" behind TLS
       AEROLAB_CLOUD_ADMIN_EMAIL: "${AEROLAB_CLOUD_ADMIN_EMAIL:-admin@example.com}"
-      AEROLAB_NEW_PASSWORD: "${AEROLAB_CLOUD_ADMIN_PASSWORD:-change-me-please-12}"
+      # empty => a random password is generated at first start and printed once (no default password)
+      AEROLAB_NEW_PASSWORD: "${AEROLAB_CLOUD_ADMIN_PASSWORD:-}"
       AEROLAB_CLOUD_SITE_ID: "${AEROLAB_CLOUD_SITE_ID:-site-demo-01}"
     restart: unless-stopped
 

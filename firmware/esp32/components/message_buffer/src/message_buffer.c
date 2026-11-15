@@ -1,5 +1,6 @@
 #include "message_buffer.h"
 #include <string.h>
+#include "jsonscan.h"
 
 void mb_init(mb_t *m, mb_meta_t *st, int cap, mb_backend_t be, void *ctx) {
     memset(st, 0, sizeof(mb_meta_t) * (size_t)cap);
@@ -77,3 +78,18 @@ int mb_next_batch(mb_t *m, uint64_t now, uint32_t resend_ms, int limit, int max_
 }
 
 int mb_read(mb_t *m, int slot, char *buf, size_t cap) { return m->meta[slot].used ? m->be.get(m->ctx, slot, buf, cap) : -1; }
+
+int mb_restore(mb_t *m, int slot, const char *data, size_t len) {
+    if (slot < 0 || slot >= m->cap || m->meta[slot].used || len == 0 || len > 0xFFFF) return -1;
+    if (!jscan_valid(data, len, 8)) return -2;
+    jval_t boot, seq, type, sev;
+    if (!jscan_get(data, len, "boot_id", &boot) || boot.t != J_STRING || boot.n == 0 || boot.n >= MB_BOOT_LEN) return -3;
+    if (!jscan_get(data, len, "seq", &seq) || seq.t != J_NUMBER || seq.num < 1) return -3;
+    bool critical = jscan_get(data, len, "type", &type) && type.t == J_STRING && type.n == 5 && !strncmp(type.p, "event", 5) &&
+                    jscan_get(data, len, "severity", &sev) && sev.t == J_STRING && sev.n == 8 && !strncmp(sev.p, "critical", 8);
+    mb_meta_t *e = &m->meta[slot];
+    memset(e, 0, sizeof *e);
+    e->used = true; e->critical = critical; e->seq = (int64_t)seq.num; e->order = m->next_order++; e->len = (uint16_t)len;
+    memcpy(e->boot, boot.p, boot.n); e->boot[boot.n] = 0;
+    return 0;
+}

@@ -118,3 +118,40 @@ func TestSSELiveEventsOverRealStack(t *testing.T) {
 		}
 	}
 }
+
+// A low-water fault that starts AND is fixed during a broker outage never reaches the Pi live. It must
+// still appear in the incident history afterwards (resolved, flagged as reconstructed), from the
+// controller's journaled events.
+func TestFaultDuringOutageIsReconstructedInHistory(t *testing.T) {
+	s := newStack(t, 2)
+	s.startBroker()
+	s.startEdge(nil)
+	s.startFleet(2, nil)
+	factoryProgram(s, 2)
+	s.waitUntil(15*time.Second, "online", func() bool { return s.allOnline(2) })
+
+	s.stopBroker()
+	d := s.fleet.Get("esp32-sim-002")
+	d.SetFaults(esp32.Faults{LowWater: true})
+	s.waitUntil(5*time.Second, "device protects itself offline", func() bool { return d.Status().ControlState == "PROTECTED_STOP" })
+	d.SetFaults(esp32.Faults{})
+	time.Sleep(300 * time.Millisecond)
+	if !d.ConfirmRecovery() {
+		t.Fatal("recovery refused")
+	}
+	s.startBroker()
+	s.waitUntil(30*time.Second, "reconstructed LOW_WATER incident in history", func() bool {
+		for _, i := range s.incidents("resolved") {
+			if i["unit_id"] == "unit-sim-002" && i["code"] == "LOW_WATER" {
+				note, _ := i["note"].(string)
+				return strings.Contains(note, "Reconstructed")
+			}
+		}
+		return false
+	})
+	for _, i := range s.incidents("active") {
+		if i["code"] == "LOW_WATER" {
+			t.Fatal("a fault that already ended was shown as active")
+		}
+	}
+}

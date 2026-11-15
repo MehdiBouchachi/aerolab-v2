@@ -36,6 +36,7 @@ extern "C" {
 extern const cs_backend_t CS_NVS_BACKEND;
 extern const mb_backend_t MB_FS_BACKEND;
 int journal_fs_mount(void);
+int journal_fs_restore(mb_t *m);
 }
 
 static const char *TAG = "app";
@@ -132,6 +133,7 @@ extern "C" void app_main(void) {
 
     journal_fs_mount();
     mb_init(&g_mb, g_meta, 400, MB_FS_BACKEND, nullptr);
+    journal_fs_restore(&g_mb); /* records buffered before a reset are resent, not orphaned */
     ch_init(&g_ch, &g_ctl, &g_cs, &g_id);
     g_ch.lock = lock_fn; g_ch.unlock = unlock_fn;
     if (g_last_cmd[0]) ch_set_last_applied(&g_ch, g_last_cmd);

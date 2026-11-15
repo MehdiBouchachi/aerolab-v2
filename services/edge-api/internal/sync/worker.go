@@ -59,7 +59,17 @@ type Worker struct {
 	mu     gosync.Mutex
 	status CloudStatus
 	kick   chan struct{}
+
+	waiting map[string]string // intents being retried (id -> reason), only to log once; bounded below
+
+	// last state snapshot the cloud acknowledged (only touched by the Run goroutine)
+	lastFP     string
+	lastSentAt time.Time
 }
+
+// StateResend: an unchanged snapshot is still re-sent at least this often, so the cloud's copy can never
+// silently diverge. The batch itself is sent every cycle regardless (it is the "site is alive" signal).
+const StateResend = 60 * time.Second
 
 func NewWorker(opt Options, db *storage.Store, cmds *commands.Manager, state func(context.Context) (sc.State, error), log *slog.Logger) *Worker {
 	return &Worker{opt: opt, db: db, cmds: cmds, state: state, log: log, kick: make(chan struct{}, 1),
@@ -138,7 +148,13 @@ func (w *Worker) cycle(ctx context.Context) (bool, error) {
 	}
 	backlog := w.backlog(ctx)
 	st.Connectivity.SyncBacklog = backlog
-	b := sc.Batch{SchemaVersion: sc.SchemaVersion, BatchID: "b-" + auth.NewID(), SiteID: w.opt.SiteID, SentAt: time.Now().UTC().Format(time.RFC3339), EdgeVersion: w.opt.EdgeVersion, State: &st, Events: []sc.Event{}}
+	b := sc.Batch{SchemaVersion: sc.SchemaVersion, BatchID: "b-" + auth.NewID(), SiteID: w.opt.SiteID, SentAt: time.Now().UTC().Format(time.RFC3339), EdgeVersion: w.opt.EdgeVersion, Events: []sc.Event{}}
+	// Upload the (P0) state only when it changed or is due: avoids rewriting every unit row in the cloud
+	// every few seconds when nothing happened.
+	sendState := st.Fingerprint == "" || st.Fingerprint != w.lastFP || time.Since(w.lastSentAt) >= StateResend
+	if sendState {
+		b.State = &st
+	}
 	for _, r := range rows {
 		// created_at is when THIS edge recorded the item, not when it is uploaded
 		b.Events = append(b.Events, sc.Event{EventID: r.id, EventType: r.typ, Priority: r.pri, CreatedAt: r.created, Payload: json.RawMessage(r.payload)})
@@ -146,10 +162,14 @@ func (w *Worker) cycle(ctx context.Context) (bool, error) {
 	var ack sc.AckResponse
 	if err := w.call(ctx, "POST", "/api/v1/edge/sync/batch", b, &ack); err != nil {
 		w.bumpAttempts(ctx, rows)
+		w.lastFP = "" // after any failure the next successful batch carries the full state again
 		return false, err
 	}
 	if err := w.markAcked(ctx, ack); err != nil {
 		return false, err
+	}
+	if sendState {
+		w.lastFP, w.lastSentAt = st.Fingerprint, time.Now()
 	}
 	now := storage.Now()
 	w.set(func(s *CloudStatus) { s.LastSyncAt = &now; s.Backlog = backlog - len(ack.Acked) - len(ack.Rejected) })
@@ -325,6 +345,10 @@ func (w *Worker) handleIntent(ctx context.Context, in sc.Intent) {
 			switch ce.Code {
 			case "PROGRAM_VERSION_CONFLICT":
 				reject(sc.IntentConflict, "PROGRAM_VERSION_CONFLICT")
+			case "DEVICE_OFFLINE", "COMMAND_PENDING":
+				// Transient: the controller is briefly unreachable, or a change is still in flight. Leave the
+				// request PENDING_SITE and try again next cycle; it expires (and never runs late) on its own.
+				w.noteWaiting(in.ID, ce.Code)
 			default:
 				reject(sc.IntentRejected, ce.Code)
 			}
@@ -385,5 +409,15 @@ func (w *Worker) Kick() {
 	select {
 	case w.kick <- struct{}{}:
 	default:
+	}
+}
+
+func (w *Worker) noteWaiting(id, reason string) {
+	if w.waiting == nil || len(w.waiting) > 256 {
+		w.waiting = map[string]string{}
+	}
+	if w.waiting[id] != reason {
+		w.waiting[id] = reason
+		w.log.Info("remote programme request waiting for the controller; will retry until it expires", "id", id, "reason", reason)
 	}
 }
