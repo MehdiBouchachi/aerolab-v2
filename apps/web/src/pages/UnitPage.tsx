@@ -1,23 +1,25 @@
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useFetch } from '../app/hooks'
 import type { Command, CropProfile, History, Incident, Program, Unit } from '../api/types'
 import { ago, clock, label, showReading, unitStatus } from '../app/format'
 import { Badge, Empty, ErrorNote, Loading, Sim } from '../components/ui'
-import { Chart } from '../components/Chart'
+import { HistoryCompare } from '../components/HistoryCompare'
 import { ProgramEditor } from './ProgramEditor'
 import { useApp } from '../app/context'
 import { HOME, IS_CLOUD, P } from '../api/paths'
-import { lazy, Suspense } from 'react'
-import { useNavigate } from 'react-router-dom'
 
 const UnitSettings = lazy(() => import('./UnitSettings').then(m => ({ default: m.UnitSettings })))
 
 const RANGES = [['1h', 3600e3], ['6h', 6 * 3600e3], ['24h', 24 * 3600e3], ['7d', 7 * 86400e3]] as const
-const CHARTS = ['water_temp_c', 'ph', 'ec_ms_cm', 'air_temp_c', 'relative_humidity_pct']
+const READING_ORDER = ['water_temp_c', 'ph', 'ec_ms_cm', 'reservoir_level_ok', 'air_temp_c', 'relative_humidity_pct', 'light_lux']
 
 export function UnitPage() {
   const { unitId = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const q = searchParams.get('tab')
+  const tab = q === 'history' ? 'history' : q === 'programme' ? 'programme' : q === 'settings' && !IS_CLOUD ? 'settings' : 'overview'
+  useEffect(() => { window.scrollTo(0, 0) }, [tab])
   const { session } = useApp()
   const site = session!.site!.id
   const [range, setRange] = useState<(typeof RANGES)[number][0]>('1h')
@@ -29,6 +31,7 @@ export function UnitPage() {
   const hist = useFetch<History>(`${P.history(site, unitId)}?from=${encodeURIComponent(new Date(now - win).toISOString())}&to=${encodeURIComponent(new Date(now).toISOString())}`, [], 0)
   const prog = useFetch<{ applied: { version: number; program: Program; applied_at: string } | null; controller_reported_version: number | null }>(P.applied(site, unitId), ['program.updated'])
   const inc = useFetch<{ incidents: Incident[] }>(`/api/v1/sites/${site}/incidents?unit_id=${unitId}&state=active`, ['incident.updated'])
+  // crop ranges live on the Pi (offline-first); the cloud copy shows only which crop is assigned
   const profileId = u.data?.unit.crop?.profile_id
   const crop = useFetch<CropProfile>(!IS_CLOUD && profileId ? `/api/v1/crop-profiles/${profileId}` : null, ['crop_profile.updated'], 0)
   const ranges = crop.data && Object.keys(crop.data.thresholds).length ? crop.data.thresholds : null
@@ -39,57 +42,63 @@ export function UnitPage() {
   const unit = u.data.unit; const st = unitStatus(unit); const r = unit.latest_readings
 
   return (
-    <>
-      <p><Link to={HOME}>← Overview</Link></p>
-      <h1>{unit.name} {unit.is_simulated && <Sim />}</h1>
-      <p className="muted">{unit.crop ? <>Growing <b>{unit.crop.crop}</b>{unit.crop.variety && ` (${unit.crop.variety})`} · profile “{unit.crop.profile_name}”</> : 'No crop profile assigned: no crop-specific alerts.'}</p>
+    <div className="unit-page">
+      <div className="unit-page-heading"><Link className="back-link" to={HOME}>← Overview</Link><div className="unit-page-title"><div><h1>{unit.name.replace(/\s*\(SIMULATED\)$/i, '')}</h1>{unit.is_simulated && <Sim />}</div><Badge tone={st.tone}>{st.text}</Badge></div>
+        <p className="muted unit-crop">{unit.crop ? <>Growing <b>{unit.crop.crop}</b>{unit.crop.variety && ` (${unit.crop.variety})`} · profile “{unit.crop.profile_name}”</> : 'No crop profile assigned: no crop-specific alerts.'}</p></div>
       <ErrorNote error={u.error} retry={u.reload} />
-      <section className="panel" aria-label="Controller status">
-        <Badge tone={st.tone}>{st.text}</Badge>
-        <dl className="kv">
-          <dt>Connection</dt><dd>{unit.connection === 'ONLINE' ? 'Controller reporting' : unit.connection === 'NEVER_SEEN' ? 'Not heard since the Pi started' : `Not reporting – last heard ${ago(unit.last_state_at)}`}</dd>
-          <dt>Controller state</dt><dd>{unit.control_state ?? 'unknown'}</dd>
-          <dt>Pump</dt><dd>{unit.pump_commanded ? `Commanded ${unit.pump_commanded}` : 'unknown'} · <span className="muted">water delivery not verified (no flow sensor)</span></dd>
-          <dt>Safety interlocks</dt><dd>{unit.essential_interlocks_ok === null ? 'unknown' : unit.essential_interlocks_ok ? 'OK' : <b>Not OK – pump held off</b>}</dd>
-          <dt>Applied programme</dt><dd>{unit.applied_program_version ? `version ${unit.applied_program_version}` : 'none'}</dd>
-          <dt>Firmware</dt><dd>{unit.firmware_version ?? '–'}{unit.controller_buffer && ` · buffer ${unit.controller_buffer.occupancy}/${unit.controller_buffer.capacity}`}{unit.controller_buffer && unit.controller_buffer.overflow_count > 0 && <b> · {unit.controller_buffer.overflow_count} records lost to overflow</b>}</dd>
-        </dl>
+      <nav className="unit-tabs" aria-label="Unit sections"><Link to="?tab=overview" aria-current={tab === 'overview' ? 'page' : undefined}>Overview</Link><Link to="?tab=history" aria-current={tab === 'history' ? 'page' : undefined}>History</Link><Link to="?tab=programme" aria-current={tab === 'programme' ? 'page' : undefined}>Programme</Link>{!IS_CLOUD && <Link to="?tab=settings" aria-current={tab === 'settings' ? 'page' : undefined}>Settings</Link>}</nav>
+      {tab === 'overview' && <>
+      <section className="panel unit-status" aria-label="Controller status">
+        <h2>Controller status</h2>
+        <div className="unit-facts">
+          <div><span>Connection</span><strong>{unit.connection === 'ONLINE' ? 'Reporting' : unit.connection === 'NEVER_SEEN' ? 'Not seen yet' : 'Not reporting'}</strong>{unit.connection !== 'ONLINE' && unit.last_state_at && <small>Last heard {ago(unit.last_state_at)}</small>}</div>
+          <div><span>Pump command</span><strong>{unit.pump_commanded ?? 'Unknown'}</strong><small>Water delivery not verified (no flow sensor)</small></div>
+          <div><span>Safety interlocks</span><strong className={unit.essential_interlocks_ok === false ? 'danger-text' : ''}>{unit.essential_interlocks_ok === null ? 'Unknown' : unit.essential_interlocks_ok ? 'OK' : 'Not OK — pump held off'}</strong></div>
+          <div><span>Applied programme</span><strong>{unit.applied_program_version ? `Version ${unit.applied_program_version}` : 'None'}</strong></div>
+        </div>
         {unit.control_state_note && <p className="note warn">{unit.control_state_note}</p>}
+        <details className="unit-technical"><summary>Controller details</summary><dl className="kv"><dt>Controller state</dt><dd>{unit.control_state ?? 'Unknown'}</dd><dt>Firmware</dt><dd>{unit.firmware_version ?? '—'}</dd><dt>Buffer</dt><dd>{unit.controller_buffer ? `${unit.controller_buffer.occupancy}/${unit.controller_buffer.capacity}` : 'Not reported'}{unit.controller_buffer && unit.controller_buffer.overflow_count > 0 && <b> · {unit.controller_buffer.overflow_count} records lost to overflow</b>}</dd></dl></details>
       </section>
 
       {inc.data && inc.data.incidents.length > 0 && (
         <section><h2>Active alerts for this unit</h2>
           <ul className="alerts">{inc.data.incidents.map(i => <li key={i.id} className={i.severity}><Badge tone={i.severity === 'critical' ? 'crit' : 'warn'}>{i.severity}</Badge> <b>{i.title}</b><div>{i.cause}</div><div className="muted">What to do: {i.suggested_action}</div></li>)}</ul></section>)}
 
-      <h2>Current readings</h2>
+      <div className="unit-section-heading"><h2>Current readings</h2>{r && <span className="muted small">Taken {ago(r.effective_at_utc)}{r.outdated && <b className="danger-text"> · OUTDATED</b>}</span>}</div>
       {!r ? <Empty>No readings have been stored for this unit yet.</Empty> : (
         <>
-          <p className="muted small">Taken {ago(r.effective_at_utc)} ({clock(r.effective_at_utc)}) · {r.time_quality === 'DEVICE_CLOCK' ? 'controller clock' : r.time_quality === 'ESTIMATED_FROM_UPTIME' ? 'time estimated from controller uptime' : 'time = when the Pi received it'}{r.outdated && <b> · OUTDATED – not current</b>}</p>
-          <table className="readings"><thead><tr><th>Sensor</th><th>Value</th><th>Quality</th>{ranges && <th>Crop range</th>}</tr></thead><tbody>
-            {Object.entries(r.readings).map(([k, v]) => {
-              const rg = ranges?.[k]; const out = rg && v.quality === 'valid' && typeof v.value === 'number' && ((rg.min !== undefined && v.value < rg.min) || (rg.max !== undefined && v.value > rg.max))
-              return <tr key={k}><td>{label(k)}</td><td className={v.quality === 'valid' ? '' : 'dim'}>{showReading(v)}{out && <b> · outside range</b>}</td><td>{v.quality}</td>{ranges && <td>{rg ? `${rg.min ?? '–'} to ${rg.max ?? '–'}` : ''}</td>}</tr>
-            })}
-          </tbody></table>
+          <p className="muted small reading-time">{clock(r.effective_at_utc)} · {r.time_quality === 'DEVICE_CLOCK' ? 'Controller clock' : r.time_quality === 'ESTIMATED_FROM_UPTIME' ? 'Time estimated from controller uptime' : 'Time recorded when the Pi received it'}</p>
+          <div className="unit-reading-grid">{Object.entries(r.readings).sort(([a], [b]) => (READING_ORDER.indexOf(a) < 0 ? 99 : READING_ORDER.indexOf(a)) - (READING_ORDER.indexOf(b) < 0 ? 99 : READING_ORDER.indexOf(b))).map(([k, v]) => {
+            const rg = ranges?.[k]
+            const out = !!rg && v.quality === 'valid' && typeof v.value === 'number' && ((rg.min !== undefined && v.value < rg.min) || (rg.max !== undefined && v.value > rg.max))
+            return <div className={`unit-reading${out ? ' out-of-range' : ''}`} key={k}><span>{label(k)}</span><strong className={v.quality === 'valid' ? '' : 'dim'}>{showReading(v)}</strong>
+              {v.quality !== 'valid' && <small>{v.quality}</small>}
+              {rg && <small className="crop-range">{out && <b>outside crop range · </b>}{rg.min !== undefined && rg.max !== undefined ? `range ${rg.min}–${rg.max}` : rg.max !== undefined ? `max ${rg.max}` : `min ${rg.min}`}</small>}</div>
+          })}</div>
         </>)}
+      </>}
 
-      <h2>History</h2>
-      <div className="seg" role="group" aria-label="Time range">{RANGES.map(([k]) => <button key={k} aria-pressed={range === k} onClick={() => setRange(k)}>{k}</button>)}</div>
+      {tab === 'history' && <>
+      <div className="history-heading"><h2>History</h2><div className="seg" role="group" aria-label="Time range">{RANGES.map(([k]) => <button key={k} aria-pressed={range === k} onClick={() => setRange(k)}>{k}</button>)}</div></div>
       <ErrorNote error={hist.error} retry={hist.reload} />
       {hist.loading && <Loading what="history" />}
       {hist.data && (hist.data.points.length === 0
         ? <Empty>No stored readings in this period.</Empty>
         : <>
-            <p className="muted small">{hist.data.points.length} points ({hist.data.resolution}). Shaded bands are periods with <b>no data</b> – nothing is drawn across them. Red ticks mark invalid or missing readings.{hist.data.truncated && ' Showing the first part only.'}{hist.data.contains_simulated_data && ' Contains SIMULATED data.'}</p>
-            {CHARTS.map(k => <Chart key={k} keyName={k} title={label(k)} points={hist.data!.points} gaps={hist.data!.gaps} from={hist.data!.from} to={hist.data!.to} />)}
+            <div className="history-legend"><span>{hist.data.points.length} points · {hist.data.resolution}</span><span>Each sensor has its own scale</span><span><i className="legend-gap" /> No data</span><span><i className="legend-invalid" /> Invalid or missing</span>{hist.data.truncated && <span>Showing the first part only</span>}{hist.data.contains_simulated_data && <span>SIMULATED data</span>}</div>
+            <HistoryCompare history={hist.data} />
           </>)}
+      </>}
 
-      <h2>Irrigation programme</h2>
-      {prog.data?.applied
-        ? <p>Applied version <b>{prog.data.applied.version}</b> (confirmed {clock(prog.data.applied.applied_at)}): pump on {prog.data.applied.program.on_duration_seconds} s, off {prog.data.applied.program.off_duration_seconds} s, max continuous {prog.data.applied.program.max_continuous_on_seconds} s.</p>
-        : <p className="muted">No programme has been confirmed through this Pi yet{prog.data?.controller_reported_version ? ` (controller reports version ${prog.data.controller_reported_version})` : ''}.</p>}
-      <ProgramEditor unit={unit} pending={u.data.pending_command} onChanged={() => { u.reload(); prog.reload() }} />
-      {!IS_CLOUD && <Suspense fallback={null}><UnitSettings unit={unit} onChanged={u.reload} onGone={() => nav(HOME)} /></Suspense>}
-    </>
+      {tab === 'programme' &&
+      <section className="programme-section" aria-labelledby="programme-heading"><h2 id="programme-heading">Irrigation programme</h2>
+        {prog.data?.applied
+          ? <p className="programme-applied">Applied version <b>{prog.data.applied.version}</b> · confirmed {clock(prog.data.applied.applied_at)} · pump on {prog.data.applied.program.on_duration_seconds} s, off {prog.data.applied.program.off_duration_seconds} s, max continuous {prog.data.applied.program.max_continuous_on_seconds} s.</p>
+          : <p className="programme-applied muted">No programme confirmed through this Pi{prog.data?.controller_reported_version ? ` · controller reports version ${prog.data.controller_reported_version}` : ''}.</p>}
+        <ProgramEditor unit={unit} pending={u.data.pending_command} onChanged={() => { u.reload(); prog.reload() }} />
+      </section>}
+
+      {tab === 'settings' && <Suspense fallback={<Loading what="settings" />}><UnitSettings unit={unit} onChanged={u.reload} onGone={() => nav(HOME)} /></Suspense>}
+    </div>
   )
 }

@@ -1,0 +1,131 @@
+/* Phone app layer. Loaded last; everything here applies at phone width only, except the
+   tap-highlight reset. The desktop layout is untouched. */
+.top-back, .card-readings .reading .label-short, .status-bar .status-label-short { display: none; }
+html { -webkit-tap-highlight-color: transparent; }
+:root { --seg-track: color-mix(in srgb, var(--line) 70%, var(--bg)); --seg-active: var(--panel); }
+:root[data-theme=dark] { --seg-track: var(--bg); --seg-active: color-mix(in srgb, var(--ink) 13%, var(--panel)); }
+
+@media (max-width: 700px) {
+  html { -webkit-text-size-adjust: 100%; }
+  body { overscroll-behavior-y: none; }
+  /* iOS zooms into inputs smaller than 16px. */
+  input, select, textarea { font-size: 16px; }
+
+  /* ---------- Top app bar: [back] brand [account] ---------- */
+  .top { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: calc(52px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+  .top .brand { grid-column: 2; font-size: 1.05rem; }
+  .mobile-account { grid-column: 3; }
+  .top-back { grid-column: 1; grid-row: 1; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-left: .25rem; border-radius: 10px; color: var(--brand); }
+  .top-back:active { background: var(--brand-soft); }
+  .top-back + .brand { padding-left: 0; }
+  .top-back + .brand::before { display: none; }
+  .mobile-account summary { border-color: transparent; border-radius: 10px; }
+  .mobile-account summary:active { background: var(--brand-soft); }
+
+  /* ---------- Account menu as a bottom sheet ---------- */
+  .mobile-account[open]::before { position: fixed; inset: 0; z-index: 20; background: #0b122066; content: ''; animation: sheet-fade .18s ease-out; }
+  .mobile-account[open] .mobile-account-panel {
+    position: fixed; top: auto; right: 0; bottom: 0; left: 0; z-index: 21;
+    width: 100%; gap: .5rem;
+    padding: .5rem 1rem calc(1.1rem + env(safe-area-inset-bottom));
+    border: 0; border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 30px #0b122030;
+    animation: sheet-up .22s cubic-bezier(.2, .8, .2, 1);
+  }
+  .sheet-grip { align-self: center; width: 36px; height: 4px; margin-bottom: .6rem; border-radius: 2px; background: var(--line); }
+  .mobile-account-panel .account-name { font-size: 1rem; }
+  .mobile-account-panel .theme-toggle, .mobile-account-panel .link { min-height: 48px; padding: 0 .9rem; font-size: .9rem; }
+  .mobile-account-panel .link { border: 1px solid var(--line); border-radius: 8px; color: var(--danger); }
+
+  /* ---------- Bottom tab bar ---------- */
+  .top > nav a { -webkit-user-select: none; user-select: none; transition: color .12s; }
+  .top > nav a:active svg { transform: scale(.9); }
+  .top > nav a svg { transition: transform .12s; }
+
+  /* ---------- Page headings: compact large titles ---------- */
+  main { padding-top: .9rem; }
+  .page-heading { margin-bottom: .9rem; }
+  .page-heading h1, .overview-page .page-heading h1, .incidents-heading h1, main h1 { margin: 0; font-size: 1.6rem; line-height: 1.15; }
+  .page-heading p, .incidents-heading p { margin: .2rem 0 0; font-size: .82rem; }
+
+  /* ---------- Overview: one-row stat strip ---------- */
+  .overview-page .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+  .overview-page .tile, .overview-page .tile.priority, .overview-page .tile.priority.ok, .overview-page .tile.crit, .overview-page .tile.warn {
+    min-height: 0; padding: .7rem .4rem .65rem; border: 0; border-radius: 0; box-shadow: none; text-align: center;
+  }
+  .overview-page .tile + .tile { border-left: 1px solid var(--line); }
+  .overview-page .tile:nth-child(n+3) { border-top: 0; }
+  .overview-page .tile b { display: block; font-size: 1.35rem; line-height: 1.2; }
+  .overview-page .tile span { display: block; margin-top: .1rem; font-size: .62rem; line-height: 1.2; }
+  .overview-page .tile.warn b { color: var(--attention); }
+  .overview-page .tile.crit b { color: var(--danger); }
+  .overview-page .section-heading { margin: 1.3rem 0 .55rem; }
+  .overview-page .section-heading h2 { font-size: 1.05rem; }
+
+  /* ---------- Overview: compact, tappable unit cards ---------- */
+  .overview-page .cards { gap: .6rem; }
+  .overview-page .card { position: relative; padding: .85rem .9rem 0; border-radius: 12px; transition: background-color .12s; }
+  .overview-page .card:hover { box-shadow: none; }
+  .overview-page .card:active { background: var(--bg); }
+  .overview-page .card header { flex-wrap: nowrap; align-items: center; gap: .5rem; margin: 0; padding: 0; border: 0; }
+  .overview-page .card .unit-title { flex-direction: row; align-items: center; gap: .4rem; }
+  .overview-page .card h3 { margin: 0; overflow: hidden; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
+  .overview-page .card .sim { flex: none; padding: .1rem .3rem; font-size: .52rem; }
+  .overview-page .card .badge { flex: none; margin-left: auto; padding: .15rem .45rem; font-size: .66rem; white-space: nowrap; }
+  .overview-page .card-readings { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: .7rem 0 .55rem; border: 0; border-radius: 0; }
+  .overview-page .card-readings .reading { min-width: 0; padding: 0 .3rem 0 0; border: 0; }
+  .overview-page .card-readings .reading + .reading { padding-left: .55rem; border-left: 1px solid var(--line); }
+  .overview-page .reading > span { font-size: .64rem; }
+  .overview-page .reading strong { margin-top: .1rem; font-size: .88rem; line-height: 1.2; white-space: normal; overflow-wrap: normal; word-break: normal; }
+  .label-long { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .card-readings .reading .label-short { display: inline; }
+  .overview-page .card .card-meta { display: flex; flex-wrap: wrap; gap: .1rem .9rem; padding: .5rem 0; border-top: 1px solid var(--line); font-size: .7rem; }
+  .overview-page .meta-item, .overview-page .meta-item + .meta-item { flex-direction: row; align-items: baseline; gap: .3rem; padding: 0; border: 0; }
+  .overview-page .meta-item > span { font-size: .68rem; }
+  .overview-page .meta-item strong { font-size: .7rem; }
+  .overview-page .meta-item small { font-size: .64rem; }
+  .overview-page .card footer { margin: 0 -.9rem; padding: .5rem .9rem .6rem; border-top: 1px solid var(--line); }
+  .overview-page .card footer .small { font-size: .66rem; }
+  .overview-page .card-link, .overview-page .card-link:hover { font-size: .74rem; text-decoration: none; }
+  /* The whole card is the link's tap target; the link stays the only interactive element. */
+  .overview-page .card-link::after { position: absolute; inset: 0; border-radius: 12px; content: ''; }
+  .overview-page .card-link:focus-visible { outline: 0; }
+  .overview-page .card-link:focus-visible::after { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- Segmented controls ---------- */
+  .unit-page .unit-tabs, .incidents-tabs {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px;
+    margin: 0 0 1rem; padding: 3px; border: 0; border-radius: 10px; background: var(--seg-track);
+  }
+  .unit-page .unit-tabs a, .incidents-tabs button, .incidents-tabs button:not(:disabled):hover {
+    justify-content: center; min-height: 36px; padding: .3rem .2rem; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: .8rem; font-weight: 600; text-decoration: none;
+  }
+  .unit-page .unit-tabs a[aria-current=page], .incidents-tabs button[aria-pressed=true], .incidents-tabs button[aria-pressed=true]:hover {
+    border: 0; background: var(--seg-active); color: var(--ink); box-shadow: 0 1px 3px #0b12201f;
+  }
+
+  /* Admin sections: horizontally scrolling chips. */
+  .admin-index { gap: .4rem; margin: .9rem -1rem 1.1rem; padding: 0 1rem .1rem; border: 0; scrollbar-width: none; }
+  .admin-index::-webkit-scrollbar { display: none; }
+  .admin-index a, .admin-index a[aria-current=page] { display: inline-flex; align-items: center; min-height: 36px; padding: 0 .85rem; border: 1px solid var(--line); border-radius: 99px; background: var(--panel); color: var(--muted); font-size: .8rem; }
+  .admin-index a[aria-current=page] { border-color: var(--brand); background: var(--brand); color: var(--button-ink, #fff); }
+
+  /* ---------- Unit page ---------- */
+  .unit-page-title h1 { font-size: 1.45rem; }
+  .unit-facts > div, .unit-facts > div:first-child, .unit-facts > div:nth-child(odd), .unit-facts > div:nth-child(even) { border-left: 0; border-right: 0; padding-left: 0; padding-right: 0; }
+  .unit-reading-grid { gap: .5rem; }
+  .unit-reading { min-height: 0; padding: .65rem .75rem; border-radius: 10px; }
+  .unit-reading strong { font-size: 1rem; }
+  .unit-section-heading { margin: 1.3rem 0 .55rem; }
+  .unit-page .unit-section-heading h2 { margin: 0; font-size: 1.05rem; }
+  .unit-page > h2 { margin: 1.3rem 0 .55rem; font-size: 1.05rem; }
+
+  /* Forms: full-width primary actions, like a native sheet. */
+  .programme-editor button.primary, .programme-editor .actions button { width: 100%; min-height: 48px; font-size: .9rem; }
+}
+
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes sheet-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .mobile-account[open]::before, .mobile-account[open] .mobile-account-panel { animation: none; }
+}

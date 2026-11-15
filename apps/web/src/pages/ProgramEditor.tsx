@@ -5,6 +5,7 @@ import { useApp } from '../app/context'
 import { IS_CLOUD, P } from '../api/paths'
 import { COMMAND_TEXT } from '../app/format'
 import { Badge } from '../components/ui'
+import { Icon } from '../components/Icon'
 
 export const BOUNDS = { on: [1, 3600], off: [1, 86400], max: [1, 3600] } as const
 export interface Draft { on: string; off: string; max: string }
@@ -29,7 +30,7 @@ export function ProgramEditor({ unit, pending, onChanged }: { unit: Unit; pendin
   const { can, subscribe, session } = useApp()
   const site = session!.site!.id
   const [draft, setDraft] = useState<Draft>({ on: '', off: '', max: '' })
-  const [touched, setTouched] = useState(false)
+  const [touched, setTouched] = useState<Partial<Record<keyof Draft, boolean>>>({})
   const [review, setReview] = useState(false)
   const [cmd, setCmd] = useState<Command | null>(pending)
   const [err, setErr] = useState<ApiError | null>(null)
@@ -60,11 +61,21 @@ export function ProgramEditor({ unit, pending, onChanged }: { unit: Unit; pendin
       setCmd(c); setReview(false)
     } catch (x) { setErr(x as ApiError); if ((x as ApiError).code === 'PROGRAM_VERSION_CONFLICT') onChanged() } finally { setBusy(false) }
   }
+  const field = (key: keyof Draft, title: string, hint: string) => {
+    const id = `programme-${key}`
+    const invalid = Boolean(touched[key] && errs[key])
+    return <div className="duration-field" key={key}>
+      <label htmlFor={id}>{title}</label>
+      <div className="duration-input"><input id={id} inputMode="numeric" value={draft[key]} onChange={e => { setDraft({ ...draft, [key]: e.target.value }); setReview(false) }} onBlur={() => setTouched(t => ({ ...t, [key]: true }))} aria-invalid={invalid} aria-describedby={`${id}-${invalid ? 'error' : 'hint'}`} /><span aria-hidden="true">sec</span></div>
+      {invalid ? <span id={`${id}-error`} className="field-error">{errs[key]}</span> : <span id={`${id}-hint`} className="field-hint">{hint}</span>}
+    </div>
+  }
 
   return (
-    <section aria-label="Programme editor">
-      <h3>{IS_CLOUD ? 'Request a programme change (remote)' : 'Change programme'}</h3>{IS_CLOUD && <p className="muted small">This is a <b>request</b>. The site re-checks it and the controller must confirm; it is never applied directly from the cloud.</p>}
-      <p className="muted small">Target: <b>{unit.name}</b> · currently applied version <b>{applied || 'none'}</b> → new version <b>{applied + 1}</b>. One unit at a time. These are timing limits, not agronomic advice – use values approved for your crop.</p>
+    <section className="programme-editor" aria-label="Programme editor">
+      <h3>{IS_CLOUD ? 'Request new timing' : 'Set irrigation timing'}</h3>{IS_CLOUD && <p className="muted small">This is a <b>request</b>. The site re-checks it and the controller must confirm; it is never applied directly from the cloud.</p>}
+      <p className="programme-guidance muted small">Use timing values approved for your crop. A change takes effect only after controller confirmation.</p>
+      <div className="programme-context"><span>Current version <b>{applied || 'none'}</b></span><span>Proposed version <b>{applied + 1}</b></span></div>
       {cmd && (
         <div className={`note ${COMMAND_TEXT[cmd.status].tone}`} role="status">
           <Badge tone={COMMAND_TEXT[cmd.status].tone}>{COMMAND_TEXT[cmd.status].text}</Badge>
@@ -74,18 +85,14 @@ export function ProgramEditor({ unit, pending, onChanged }: { unit: Unit; pendin
         </div>)}
       {err && <div className="note error" role="alert">{err.code === 'PROGRAM_VERSION_CONFLICT' ? `The controller already runs version ${String(err.details.actual_version)}. Review the current programme and try again.` : err.message}</div>}
       <fieldset disabled={inflight || busy}>
-        <div className="grid3">
-          {([['on', 'Pump on (seconds)'], ['off', 'Pump off (seconds)'], ['max', 'Max continuous on (seconds)']] as const).map(([k, l]) => (
-            <label key={k}>{l}<input inputMode="numeric" value={draft[k]} onChange={e => { setDraft({ ...draft, [k]: e.target.value }); setReview(false) }} onBlur={() => setTouched(true)} aria-invalid={touched && !!errs[k]} />
-              {touched && errs[k] && <span className="field-error">{errs[k]}</span>}</label>))}
-        </div>
-        <p className="small muted">Reservoir-level protection is always on and cannot be switched off.</p>
+        <div className="programme-form-group"><h4>Cycle timing</h4><div className="duration-grid">{field('on', 'Pump on', 'Run time · 1–3,600 seconds')}{field('off', 'Pump off', 'Pause time · 1–86,400 seconds')}</div></div>
+        <div className="programme-form-group safety"><h4>Safety limit</h4><div className="duration-grid">{field('max', 'Maximum continuous on', 'At least pump-on time · 1–3,600 seconds')}<div className="protection-note"><Icon name="check" size={17} /><div><strong>Reservoir protection</strong><span>Always on. It cannot be switched off.</span></div></div></div></div>
         {!review
-          ? <button className="primary" disabled={!!blocked} onClick={() => { setTouched(true); if (!Object.keys(errs).length) setReview(true) }}>Review change</button>
+          ? <button className="primary" disabled={!!blocked} onClick={() => { setTouched({ on: true, off: true, max: true }); if (!Object.keys(errs).length) setReview(true) }}>Review change</button>
           : (
             <div className="review">
               <b>Confirm:</b> pump runs {draft.on} s every {Number(draft.on) + Number(draft.off)} s (off {draft.off} s), never longer than {draft.max} s at a time, on <b>{unit.name}</b> only.
-              <div><button className="primary" onClick={() => void send()} disabled={busy}>{busy ? 'Sending…' : 'Send to controller'}</button> <button onClick={() => setReview(false)}>Edit</button></div>
+              <div><button className="primary" onClick={() => void send()} disabled={busy}>{busy ? 'Sending…' : 'Send to controller'}</button> <button className="secondary" onClick={() => setReview(false)}>Edit</button></div>
             </div>)}
         {blocked && <p className="field-error">{blocked}</p>}
       </fieldset>

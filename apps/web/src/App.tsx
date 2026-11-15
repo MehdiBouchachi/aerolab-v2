@@ -6,6 +6,7 @@ import { Login } from './pages/Login'
 import { Overview } from './pages/Overview'
 import { Incidents } from './pages/Incidents'
 import { IS_CLOUD } from './api/paths'
+import { ThemeProvider } from './app/theme'
 
 // Loaded on demand: the overview (what most visits open) no longer downloads charts, the programme
 // editor, the QR-code library or the admin pages.
@@ -41,5 +42,5 @@ function Gate() {
 }
 
 export default function App() {
-  return <AppProvider><BrowserRouter><Gate /></BrowserRouter></AppProvider>
+  return <ThemeProvider><AppProvider><BrowserRouter><Gate /></BrowserRouter></AppProvider></ThemeProvider>
 }

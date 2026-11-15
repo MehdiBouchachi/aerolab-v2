@@ -2,13 +2,15 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Login } from './pages/Login'
 import { Chart } from './components/Chart'
+import { HistoryCompare } from './components/HistoryCompare'
+import { ThemeProvider } from './app/theme'
 
 const signIn = vi.fn()
 vi.mock('./app/context', () => ({ useApp: () => ({ signIn }) }))
 
 describe('Login', () => {
   it('validates on blur and does not call the server with empty fields', async () => {
-    render(<Login />)
+    render(<ThemeProvider><Login /></ThemeProvider>)
     fireEvent.blur(screen.getByLabelText('Username'))
     expect(screen.getByText('Enter your username.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
@@ -16,7 +18,7 @@ describe('Login', () => {
   })
   it('explains a wrong password without blaming the user', async () => {
     signIn.mockRejectedValueOnce(Object.assign(new Error('x'), { status: 401 }))
-    render(<Login />)
+    render(<ThemeProvider><Login /></ThemeProvider>)
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'admin' } })
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'nope' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
@@ -37,5 +39,22 @@ describe('Chart', () => {
       points={[p('2026-11-12T10:00:00Z', 6), p('2026-11-12T10:01:00Z', 6.1), p('2026-11-12T10:02:00Z', 6.1), p('2026-11-12T10:50:00Z', 6.2), p('2026-11-12T10:51:00Z', 6.3)]} />)
     expect(container.querySelectorAll('polyline')).toHaveLength(2)
     expect(container.querySelectorAll('rect.gap')).toHaveLength(1)
+  })
+})
+
+describe('HistoryCompare', () => {
+  it('shows all sensors at the same selected time', () => {
+    const reading = (value: number) => ({ value, quality: 'valid' as const, unit: 'C' })
+    render(<HistoryCompare history={{ from: '2026-11-12T10:00:00Z', to: '2026-11-12T11:00:00Z', resolution: 'raw', truncated: false, contains_simulated_data: true, gaps: [], points: [
+      { t: '2026-11-12T10:00:00Z', snapshots: 1, time_quality: 'DEVICE_CLOCK', readings: { water_temp_c: reading(20), air_temp_c: reading(22) } },
+      { t: '2026-11-12T11:00:00Z', snapshots: 1, time_quality: 'DEVICE_CLOCK', readings: { water_temp_c: reading(21), air_temp_c: reading(23) } },
+    ] }} />)
+    expect(document.querySelectorAll('.compare-row')).toHaveLength(5)
+    expect(screen.getByText('21 C')).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('slider', { name: 'Compare readings at time' }), { target: { value: '0' } })
+    expect(screen.getByText('20 C')).toBeInTheDocument()
+    expect(screen.getByText('22 C')).toBeInTheDocument()
+    fireEvent.pointerMove(document.querySelector('.compare-row svg')!, { pointerType: 'mouse', clientX: 632 })
+    expect(screen.getByText('20 C')).toBeInTheDocument()
   })
 })
