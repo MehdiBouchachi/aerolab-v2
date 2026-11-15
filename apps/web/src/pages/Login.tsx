@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { useApp } from '../app/context'
 import { ApiError } from '../api/client'
+import { useTheme } from '../app/theme'
 
 export function Login() {
+  const { theme, toggle } = useTheme()
   const { signIn } = useApp()
   const [u, setU] = useState(''); const [p, setP] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
   const [touched, setTouched] = useState({ u: false, p: false })
@@ -17,6 +19,7 @@ export function Login() {
   }
   return (
     <div className="login">
+      <button className="theme-toggle login-theme" type="button" onClick={toggle} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>{theme === 'dark' ? '☀ Light' : '☾ Dark'}</button>
       <form onSubmit={submit} noValidate aria-labelledby="t">
         <h1 id="t">AeroLab</h1>
         <p className="muted">Sign in to this site. This works without internet.</p>

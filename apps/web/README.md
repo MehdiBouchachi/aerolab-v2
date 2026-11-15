@@ -14,5 +14,5 @@ history charts with explicit gaps, applied programme, programme editor Draft→R
 Conflict/Unknown/Expired) · Alerts (acknowledge ≠ resolve) · Administration (storage health, controllers, local
 accounts, audit). Every page shows source (LOCAL), live-stream state, freshness and SIMULATED labels.
 
-Not built yet: crop batches/journal/harvest, CSV/JSON export, calibration records, dark-mode toggle (follows the OS),
+Not built yet: crop batches/journal/harvest, CSV/JSON export, calibration records,
 i18n. The backend endpoints for crops/exports do not exist yet, so no placeholder screens were added.
