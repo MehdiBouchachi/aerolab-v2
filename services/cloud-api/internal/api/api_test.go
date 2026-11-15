@@ -675,3 +675,39 @@ func TestRoutesMatchOpenAPIExactly(t *testing.T) {
 		}
 	}
 }
+
+func TestUnitsRemovedAtTheSiteDisappearOnlyOnACompleteSnapshot(t *testing.T) {
+	e := newEnv(t)
+	u := e.user("v@x.test")
+	e.site("site-a-0001")
+	e.member("site-a-0001", u, "VIEWER")
+	post := func(complete bool, at time.Time, units ...json.RawMessage) {
+		st := state(at, units...)
+		st.UnitsComplete = complete
+		if w := e.do("POST", "/api/v1/edge/sync/batch", e.edge["site-a-0001"], batch("site-a-0001", st)); w.Code != 200 {
+			t.Fatal(w.Body.String())
+		}
+	}
+	now := time.Now()
+	post(true, now, unitJSON("unit-sim-001", "A", "ONLINE", "RUNNING"), unitJSON("unit-sim-002", "B", "ONLINE", "RUNNING"))
+	if n := e.count(`SELECT COUNT(*) FROM units`); n != 2 {
+		t.Fatalf("%d units", n)
+	}
+	// a PARTIAL (or older-format) snapshot listing only one unit must not delete the other
+	post(false, now.Add(time.Second), unitJSON("unit-sim-001", "A", "ONLINE", "RUNNING"))
+	if n := e.count(`SELECT COUNT(*) FROM units`); n != 2 {
+		t.Fatalf("a partial snapshot deleted units: %d left", n)
+	}
+	// a COMPLETE snapshot without unit 2: unit 2 was removed at the site
+	post(true, now.Add(2*time.Second), unitJSON("unit-sim-001", "A", "ONLINE", "RUNNING"))
+	var o struct{ Units []map[string]any }
+	_ = json.Unmarshal(e.do("GET", "/api/v1/sites/site-a-0001/units", e.tok["v@x.test"], nil).Body.Bytes(), &o)
+	if len(o.Units) != 1 || o.Units[0]["id"] != "unit-sim-001" {
+		t.Fatalf("removed unit still shown: %v", o.Units)
+	}
+	// an OLDER complete snapshot arriving late changes nothing (stale-snapshot guard runs first)
+	post(true, now.Add(-time.Hour))
+	if n := e.count(`SELECT COUNT(*) FROM units`); n != 1 {
+		t.Fatalf("a stale snapshot deleted current units: %d", n)
+	}
+}

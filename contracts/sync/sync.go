@@ -66,6 +66,9 @@ type State struct {
 	SiteName     string            `json:"site_name"`
 	Connectivity Connectivity      `json:"connectivity"`
 	Units        []json.RawMessage `json:"units"`
+	// UnitsComplete: Units is the FULL list of the site's units, so the cloud may drop units that are
+	// absent. False (or missing, e.g. an older edge) means "partial": the cloud then deletes nothing.
+	UnitsComplete bool `json:"units_complete"`
 }
 
 type Connectivity struct {

@@ -9,8 +9,8 @@ docker compose --profile cloud up --build   # plus PostgreSQL + cloud API/dashbo
 
 * Dashboard: http://localhost:8080 - the login (random, generated on first start and kept in the
   `aerolab-data` volume) is printed in the container log: `docker compose logs aerolab`.
-* Cloud (profile `cloud`): http://localhost:8090, admin `admin@example.com` / `change-me-please-12`
-  (override with `AEROLAB_CLOUD_ADMIN_EMAIL` / `AEROLAB_CLOUD_ADMIN_PASSWORD`; dev defaults only).
+* Cloud (profile `cloud`): http://localhost:8090 (bound to 127.0.0.1 by default), admin `admin@example.com`; the password is random, generated on first start and printed once in `docker compose logs cloud` (or set `AEROLAB_CLOUD_ADMIN_PASSWORD`)
+  (override with `AEROLAB_CLOUD_ADMIN_EMAIL` / `AEROLAB_CLOUD_ADMIN_PASSWORD`).
   The edge token for linking a site is printed once in `docker compose logs cloud`.
 * Options: `DEVICES=20`, `AEROLAB_PORT`, `AEROLAB_CLOUD_PORT`, `POSTGRES_PASSWORD`.
 * Reset everything: `docker compose --profile cloud down -v`.

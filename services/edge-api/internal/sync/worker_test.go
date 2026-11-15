@@ -37,7 +37,7 @@ func newCloud(t *testing.T) *fakeCloud {
 		defer f.mu.Unlock()
 		f.auth = r.Header.Get("Authorization")
 		if f.down {
-			http.Error(w, "down", 503)
+			http.Error(w, "down", http.StatusServiceUnavailable)
 			return
 		}
 		switch r.URL.Path {

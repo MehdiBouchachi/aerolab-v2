@@ -113,6 +113,7 @@ type cloudSite struct {
 	tok     string // cloud admin session
 	email   string
 	pw      string
+	db      *sql.DB
 }
 
 func (s *stack) cloudEnv(dsn string, extra ...string) []string {
@@ -200,11 +201,18 @@ func (c *cloudSite) login() {
 	c.tok = r.Token
 }
 
+// pg returns ONE pool per test. (Opening a pool per call leaked connections until
+// PostgreSQL refused new clients - "too many clients already" - making tests flaky.)
 func (c *cloudSite) pg() *sql.DB {
+	if c.db != nil {
+		return c.db
+	}
 	d, err := sql.Open("pgx", c.dsn)
 	if err != nil {
 		c.s.t.Fatal(err)
 	}
+	d.SetMaxOpenConns(2)
+	c.db = d
 	c.s.t.Cleanup(func() { d.Close() })
 	return d
 }

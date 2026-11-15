@@ -86,6 +86,7 @@ type stack struct {
 	edgeEnv    map[string]string
 	fleet      *esp32.Fleet
 	tok        string
+	ro         *sql.DB
 }
 
 func newStack(t *testing.T, devices int) *stack {
@@ -315,11 +316,6 @@ func (s *stack) unit(id string) unitJSON {
 	return unitJSON{}
 }
 
-type incidentJSON struct {
-	ID, UnitID, Code, Status, Severity, Title string
-	UnitIDx                                   string `json:"unit_id"`
-}
-
 func (s *stack) incidents(state string) []map[string]any {
 	var r struct{ Incidents []map[string]any }
 	s.call("GET", "/api/v1/sites/"+s.prov.SiteID+"/incidents?state="+state, s.admin(), nil, &r)
@@ -353,11 +349,17 @@ func (s *stack) allOnline(n int) bool {
 
 // -------------------------------------------------------------- DB access
 
+// db returns ONE read-only pool per test (see cloudSite.pg for why).
 func (s *stack) db() *sql.DB {
+	if s.ro != nil {
+		return s.ro
+	}
 	db, err := sql.Open("sqlite", "file:"+s.dbPath()+"?mode=ro&_pragma=busy_timeout(5000)")
 	if err != nil {
 		s.t.Fatal(err)
 	}
+	db.SetMaxOpenConns(2)
+	s.ro = db
 	s.t.Cleanup(func() { db.Close() })
 	return db
 }
@@ -445,15 +447,6 @@ func (s *stack) waitNoLoss(timeout time.Duration, slack int64) time.Duration {
 	}
 	s.t.Fatalf("records still missing from SQLite after %s: %v", timeout, last)
 	return 0
-}
-
-func (s *stack) journalsDrained(max int) bool {
-	for _, d := range s.fleet.All() {
-		if d.Status().JournalOcc > max {
-			return false
-		}
-	}
-	return true
 }
 
 var prog1s = map[string]any{"mode": "TIMED_CYCLE", "on_duration_seconds": 1, "off_duration_seconds": 1, "max_continuous_on_seconds": 1, "require_reservoir_ok": true}

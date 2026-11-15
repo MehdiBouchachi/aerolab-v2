@@ -9,8 +9,10 @@ WORKDIR /src
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/web ./apps/web
 COPY apps/mobile/package.json ./apps/mobile/package.json
-RUN cd apps/web && pnpm install --frozen-lockfile=false \
- && pnpm build \
+# install ONLY the web app's dependencies from the lockfile (the workspace also contains the Expo app:
+# installing everything pulled ~568 packages / ~650 MB instead of ~150 / ~190 MB)
+RUN pnpm install --frozen-lockfile --filter @aerolab/web \
+ && cd apps/web && pnpm build \
  && VITE_SOURCE=cloud pnpm build --outDir dist-cloud
 
 FROM golang:1.24-alpine AS gobuild

@@ -108,6 +108,13 @@ func applyState(ctx context.Context, tx *sql.Tx, siteID string, st *sc.State) er
 			return err
 		}
 	}
+	// Units removed at the site must not linger in the cloud showing a stale "last known" state.
+	// Only a snapshot that says it is COMPLETE may delete; a partial or older-format one never does.
+	if st.UnitsComplete {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM units WHERE site_id=$1 AND NOT (id = ANY($2))`, siteID, seen); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

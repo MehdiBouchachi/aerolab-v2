@@ -33,12 +33,6 @@ func newSensorBank(seed int64) *sensorBank {
 func (s *sensorBank) setFaults(f Faults) { s.mu.Lock(); s.faults = f; s.mu.Unlock() }
 func (s *sensorBank) getFaults() Faults  { s.mu.Lock(); defer s.mu.Unlock(); return s.faults }
 
-// essential reports the interlock inputs (level ok, level sensor valid).
-func (s *sensorBank) essential() (levelOK, sensorValid bool) {
-	f := s.getFaults()
-	return !f.LowWater, !f.LevelSensorInvalid
-}
-
 // sample returns a full reading set at the given uptime (seconds).
 func (s *sensorBank) sample(uptimeSec float64) map[string]mc.Reading {
 	s.mu.Lock()
