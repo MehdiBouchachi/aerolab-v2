@@ -22,6 +22,19 @@ paths:
     post: { summary: "Revoke session", responses: { '200': { description: ok } } }
   /api/v1/session:
     get: { summary: "User, per-site roles, capabilities", responses: { '200': { description: ok } } }
+  # ---- self-service fleets (docs/architecture/fleet-management.md)
+  /api/v1/auth/signup:
+    post: { summary: "Create an account + organisation (kind PERSONAL|BUSINESS|GOVERNMENT). 403 SIGNUP_DISABLED unless AEROLAB_CLOUD_SIGNUP=open", security: [], responses: { '201': { description: session token + organisation }, '403': { description: SIGNUP_DISABLED }, '409': { description: ACCOUNT_EXISTS } } }
+  /api/v1/orgs:
+    get: { summary: "Organisations the caller belongs to, with their role and number of Pis", responses: { '200': { description: ok } } }
+  /api/v1/orgs/{orgId}/members:
+    put: { summary: "Owner adds an existing account as OWNER (admin of every Pi connected afterwards) or MEMBER (sees nothing until given a site role)", responses: { '200': { description: ok }, '403': { description: not an owner } } }
+  /api/v1/orgs/{orgId}/site-claims:
+    post: { summary: "Owner creates a single-use, 24 h code to connect a Pi (only its hash is stored)", responses: { '201': { description: code shown once } } }
+  /api/v1/edge/claim:
+    post: { summary: "A Pi presents a claim code (rate-limited per address) and receives its own edge token; site created, owners made ADMIN, code consumed, all in one transaction", security: [], responses: { '201': { description: edge token }, '400': { description: INVALID_CLAIM_CODE }, '409': { description: SITE_ID_TAKEN }, '429': { description: RATE_LIMITED } } }
+  /api/v1/fleet:
+    get: { summary: "Every Pi the caller may see, grouped by organisation: units total/online/needing attention, crops grown, active incidents (last known for stale Pis)", responses: { '200': { description: ok } } }
   /api/v1/sites:
     get: { summary: "Sites the caller is a member of", responses: { '200': { description: ok } } }
   /api/v1/sites/{siteId}/summary:

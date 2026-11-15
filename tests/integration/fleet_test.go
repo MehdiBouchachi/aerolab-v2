@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -97,3 +100,114 @@ func TestF1_AddUnitFromDashboardThenCropRangeAlert(t *testing.T) {
 		t.Fatalf("generated device id %q", b.DeviceID)
 	}
 }
+
+// startCloudWithoutSite runs the cloud with one organisation owner and NO site: the Pi must connect itself.
+func (s *stack) startCloudWithoutSite() *cloudSite {
+	s.t.Helper()
+	dsn := newPGDSN(s.t)
+	c := &cloudSite{s: s, dsn: dsn, port: freePort(s.t), email: "owner@coop.example", pw: "owner-password-long-1"}
+	cmd := exec.Command(buildCloud(s.t), "create-user", "-email", c.email)
+	cmd.Env = s.cloudEnv(dsn, "AEROLAB_NEW_PASSWORD="+c.pw)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		s.t.Fatalf("create-user: %v\n%s", err, out)
+	}
+	if _, err := c.pg().Exec(`INSERT INTO organizations(id,name,kind) VALUES ('org-it','IT Coop','BUSINESS')`); err != nil {
+		s.t.Fatal(err)
+	}
+	if _, err := c.pg().Exec(`INSERT INTO organization_members(org_id,user_id,role) SELECT 'org-it', id, 'OWNER' FROM cloud_users WHERE email=$1`, c.email); err != nil {
+		s.t.Fatal(err)
+	}
+	c.startProc("30s", "10s")
+	c.wan = newWAN(s.t, fmt.Sprintf("127.0.0.1:%d", c.port))
+	s.t.Cleanup(c.stop)
+	return c
+}
+
+// F2: an organisation owner creates a one-time code in the cloud; the farmer types it into the Pi's
+// local dashboard; the Pi connects itself (no env edits, no restart) and shows up in the fleet
+// overview; the link survives a Pi restart; disconnecting stops the sync; the code cannot be reused.
+func TestF2_ConnectAPiToTheCloudWithAClaimCode(t *testing.T) {
+	s := newStack(t, 2)
+	s.startBroker()
+	c := s.startCloudWithoutSite()
+	env := map[string]string{"AEROLAB_CLOUD_ALLOW_INSECURE": "true", "AEROLAB_CLOUD_SYNC_INTERVAL": "1s"}
+	s.startEdge(env)
+	s.startFleet(2, nil)
+	factoryProgram(s, 2)
+	s.waitUntil(20*time.Second, "units online on the Pi", func() bool { return s.allOnline(2) })
+
+	c.login()
+	var claim struct{ Code string }
+	if code := c.call("POST", "/api/v1/orgs/org-it/site-claims", nil, &claim); code != 201 {
+		t.Fatalf("claim code: %d", code)
+	}
+	var li struct{ Link struct{ Linked bool } }
+	if s.call("GET", "/api/v1/cloud-link", s.admin(), nil, &li); li.Link.Linked {
+		t.Fatal("linked before connecting")
+	}
+	var bad struct{ Error struct{ Code string } }
+	if code := s.call("POST", "/api/v1/cloud-link", s.admin(), map[string]any{"cloud_url": c.wan.URL(), "code": "WRONG-WRON-GWRO"}, &bad); code != 400 || bad.Error.Code != "INVALID_CLAIM_CODE" {
+		t.Fatalf("wrong code: %d %+v", code, bad)
+	}
+	if code := s.call("POST", "/api/v1/cloud-link", s.admin(), map[string]any{"cloud_url": c.wan.URL(), "code": claim.Code}, nil); code != 201 {
+		t.Fatalf("connect: %d (edge log: %s)", code, tail(readFile(filepath.Join(s.dir, "edge.log")), 2000))
+	}
+
+	type fleetResp struct {
+		Organizations []struct {
+			Sites []struct {
+				ID          string  `json:"id"`
+				Role        string  `json:"role"`
+				UnitsTotal  int     `json:"units_total"`
+				UnitsOnline int     `json:"units_online"`
+				LastSyncAt  *string `json:"last_sync_at"`
+			} `json:"sites"`
+		} `json:"organizations"`
+	}
+	site := func() (id string, total, online int, last string) {
+		var f fleetResp
+		c.call("GET", "/api/v1/fleet", nil, &f)
+		if len(f.Organizations) == 0 || len(f.Organizations[0].Sites) == 0 {
+			return "", 0, 0, ""
+		}
+		x := f.Organizations[0].Sites[0]
+		l := ""
+		if x.LastSyncAt != nil {
+			l = *x.LastSyncAt
+		}
+		return x.ID, x.UnitsTotal, x.UnitsOnline, l
+	}
+	s.waitUntil(20*time.Second, "Pi and its units visible in the cloud fleet", func() bool {
+		id, total, online, _ := site()
+		return id == s.prov.SiteID && total == 2 && online == 2
+	})
+
+	// the link is stored: after a restart the Pi keeps syncing with no configuration change
+	s.stopEdgeGracefully()
+	time.Sleep(1500 * time.Millisecond)
+	_, _, _, before := site()
+	s.startEdge(env)
+	s.waitUntil(20*time.Second, "sync resumes after the Pi restarts", func() bool {
+		_, _, _, after := site()
+		return after != before
+	})
+
+	// disconnect: the cloud stops hearing from this Pi
+	if code := s.call("DELETE", "/api/v1/cloud-link", s.admin(), nil, nil); code != 204 {
+		t.Fatalf("disconnect: %d", code)
+	}
+	time.Sleep(2 * time.Second)
+	_, _, _, a := site()
+	time.Sleep(3 * time.Second)
+	if _, _, _, b := site(); a != b {
+		t.Fatalf("the Pi kept syncing after it was disconnected (%s -> %s)", a, b)
+	}
+	if code := s.call("POST", "/api/v1/cloud-link", s.admin(), map[string]any{"cloud_url": c.wan.URL(), "code": claim.Code}, &bad); code != 400 {
+		t.Fatalf("a used code connected again: %d", code)
+	}
+	if s.allOnline(2) != true {
+		t.Fatal("local operation affected by cloud link changes")
+	}
+}
+
+func readFile(p string) string { b, _ := os.ReadFile(p); return string(b) }

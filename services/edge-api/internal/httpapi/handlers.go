@@ -680,7 +680,7 @@ func (s *Server) ackIncident(w http.ResponseWriter, r *http.Request, u auth.User
 	err := s.DB.Tx(r.Context(), func(tx *sql.Tx) error {
 		var e error
 		inc, changed, e = incidents.Acknowledge(r.Context(), tx, s.Cfg.SiteID, r.PathValue("incidentId"), u.ID)
-		if e == nil && changed && s.Cfg.CloudSyncEnabled {
+		if e == nil && changed && s.cloud() != nil {
 			e = edgesync.EnqueueIncident(r.Context(), tx, s.Cfg.SiteID, inc)
 		}
 		return e
@@ -821,27 +821,30 @@ var _ = fmt.Sprintf
 // talking to the cloud API. With sync disabled (the permanently-offline site)
 // reachability is unknown (null), never "false" and never invented.
 func (s *Server) cloudInfo() map[string]any {
-	if s.Cloud == nil {
+	c := s.cloud()
+	if c == nil {
 		return map[string]any{"enabled": false, "last_sync_at": nil}
 	}
-	st := s.Cloud.Status()
+	st := c.Status()
 	return map[string]any{"enabled": true, "last_sync_at": st.LastSyncAt, "reachable": st.Reachable, "backlog": st.Backlog, "consecutive_failures": st.ConsecutiveFailures, "remote_programs_accepted": st.RemotePrograms}
 }
 
 func (s *Server) cloudReach() any {
-	if s.Cloud == nil {
+	c := s.cloud()
+	if c == nil {
 		return nil
 	}
-	if r := s.Cloud.Status().Reachable; r != nil {
+	if r := c.Status().Reachable; r != nil {
 		return *r
 	}
 	return nil
 }
 
 func (s *Server) cloudDetail(pending int64) map[string]any {
-	m := map[string]any{"enabled": s.Cfg.CloudSyncEnabled, "outbox_pending": pending}
-	if s.Cloud != nil {
-		st := s.Cloud.Status()
+	c := s.cloud()
+	m := map[string]any{"enabled": c != nil, "outbox_pending": pending}
+	if c != nil {
+		st := c.Status()
 		m["reachable"], m["last_sync_at"], m["last_error"], m["consecutive_failures"], m["rejected_items_dropped"] = st.Reachable, st.LastSyncAt, st.LastError, st.ConsecutiveFailures, st.RejectedItems
 	}
 	return m

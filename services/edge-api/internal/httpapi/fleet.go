@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	edgesync "github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sync"
 	"net"
 	"net/http"
 	"strings"
@@ -28,6 +29,10 @@ func (s *Server) registerFleet() {
 	s.protected("POST", "/api/v1/units/{unitId}/retire", roles.ManageDevices, s.retireUnit)
 	s.protected("POST", "/api/v1/units/{unitId}/setup-code", roles.ManageDevices, s.newSetupCode)
 	s.protected("PUT", "/api/v1/units/{unitId}/crop-profile", roles.EditProgram, s.assignCrop)
+
+	s.protected("GET", "/api/v1/cloud-link", roles.ManageDevices, s.getCloudLink)
+	s.protected("POST", "/api/v1/cloud-link", roles.ManageDevices, s.postCloudLink)
+	s.protected("DELETE", "/api/v1/cloud-link", roles.ManageDevices, s.deleteCloudLink)
 
 	s.protected("GET", "/api/v1/sites/{siteId}/crop-profiles", roles.ViewData, s.listCrops)
 	s.protected("POST", "/api/v1/sites/{siteId}/crop-profiles", roles.EditProgram, s.createCrop)
@@ -352,5 +357,73 @@ func (s *Server) assignCrop(w http.ResponseWriter, r *http.Request, u auth.User)
 	}
 	s.reloadRanges(r.Context())
 	s.Hub.Publish("unit.updated", map[string]any{"unit_id": unitID})
+	w.WriteHeader(204)
+}
+
+// --------------------------------------------------------------- cloud link
+
+func (s *Server) noLinker(w http.ResponseWriter, r *http.Request) bool {
+	if s.Linker == nil {
+		writeError(w, r, 404, "NOT_FOUND", "cloud connection is not available on this Pi", nil)
+		return true
+	}
+	return false
+}
+
+func (s *Server) getCloudLink(w http.ResponseWriter, r *http.Request, u auth.User) {
+	if s.noLinker(w, r) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"link": s.Linker.CloudLinkInfo(r.Context()), "sync": s.cloudInfo()})
+}
+
+func (s *Server) postCloudLink(w http.ResponseWriter, r *http.Request, u auth.User) {
+	if s.noLinker(w, r) {
+		return
+	}
+	var in struct {
+		CloudURL string `json:"cloud_url"`
+		Code     string `json:"code"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	if strings.TrimSpace(in.Code) == "" {
+		writeError(w, r, 400, "VALIDATION_FAILED", "enter the code from the cloud dashboard", map[string]any{"field": "code"})
+		return
+	}
+	li, err := s.Linker.LinkCloud(r.Context(), in.CloudURL, in.Code, u.ID)
+	var ce *edgesync.ClaimError
+	switch {
+	case errors.As(err, &ce):
+		st := ce.Status
+		if st < 400 || st >= 500 {
+			st = 502
+		}
+		writeError(w, r, st, ce.Code, ce.Message, nil)
+	case err != nil && strings.Contains(err.Error(), "installer"):
+		writeError(w, r, 409, "CONFIGURED_BY_INSTALLER", err.Error(), nil)
+	case err != nil:
+		s.Log.Warn("cloud link failed", "err", err)
+		writeError(w, r, 502, "CLOUD_UNREACHABLE", err.Error(), nil)
+	default:
+		s.Hub.Publish("site.cloud_link", li)
+		writeJSON(w, 201, map[string]any{"link": li, "note": "Readings recorded before connecting stay on this Pi; the cloud receives new data and the current state from now on."})
+	}
+}
+
+func (s *Server) deleteCloudLink(w http.ResponseWriter, r *http.Request, u auth.User) {
+	if s.noLinker(w, r) {
+		return
+	}
+	if err := s.Linker.UnlinkCloud(r.Context(), u.ID); err != nil {
+		if strings.Contains(err.Error(), "installer") {
+			writeError(w, r, 409, "CONFIGURED_BY_INSTALLER", err.Error(), nil)
+			return
+		}
+		s.mapErr(w, r, err)
+		return
+	}
+	s.Hub.Publish("site.cloud_link", LinkInfo{})
 	w.WriteHeader(204)
 }

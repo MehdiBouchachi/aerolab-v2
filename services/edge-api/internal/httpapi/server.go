@@ -18,6 +18,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/auth"
@@ -54,18 +55,58 @@ type Deps struct {
 	Pairing *pairing.Service
 	Broker  *broker.Manager  // nil/disabled: controllers are added by the installer only
 	Ranges  *crops.Evaluator // crop-profile range alerts (nil disables them)
+	Linker  CloudLinker      // "Connect to cloud" at runtime (nil: not offered)
 	Static  fs.FS
 	Log     *slog.Logger
 }
 
 type Server struct {
 	Deps
+	link   atomic.Pointer[cloudBox] // set at startup or when the Pi is connected at runtime
 	mux    *http.ServeMux
 	routes []string
 }
 
+type cloudBox struct{ CloudLink }
+
+// LinkInfo describes this Pi's cloud connection (never the token).
+type LinkInfo struct {
+	Linked        bool   `json:"linked"`
+	URL           string `json:"url,omitempty"`
+	OrgName       string `json:"organization_name,omitempty"`
+	LinkedBy      string `json:"linked_by,omitempty"`
+	LinkedAt      string `json:"linked_at,omitempty"`
+	FromInstaller bool   `json:"configured_by_installer"`
+}
+
+type CloudLinker interface {
+	CloudLinkInfo(ctx context.Context) LinkInfo
+	LinkCloud(ctx context.Context, cloudURL, code, actor string) (LinkInfo, error)
+	UnlinkCloud(ctx context.Context, actor string) error
+}
+
+// cloud returns the live cloud link, or nil while this Pi is not connected to a cloud.
+func (s *Server) cloud() CloudLink {
+	if b := s.link.Load(); b != nil {
+		return b.CloudLink
+	}
+	return nil
+}
+
+// SetCloud installs (or removes, with nil) the cloud link at runtime.
+func (s *Server) SetCloud(c CloudLink) {
+	if c == nil {
+		s.link.Store(nil)
+		return
+	}
+	s.link.Store(&cloudBox{c})
+}
+
 func New(d Deps) *Server {
 	s := &Server{Deps: d, mux: http.NewServeMux()}
+	if d.Cloud != nil {
+		s.SetCloud(d.Cloud)
+	}
 	s.register()
 	return s
 }

@@ -51,8 +51,13 @@ type App struct {
 	HTTP    *httpapi.Server
 	Sync    *edgesync.Worker
 	Broker  *broker.Manager
-	Ranges  *crops.Evaluator
-	Pair    *pairing.Service
+
+	linkMu     sync.Mutex
+	wctx       context.Context
+	spawn      func(func(context.Context))
+	syncCancel context.CancelFunc
+	Ranges     *crops.Evaluator
+	Pair       *pairing.Service
 
 	ln net.Listener
 }
@@ -127,16 +132,18 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		}
 	}
 	ingest = telemetry.NewIngest(cfg.SiteID, cfg.AllowSimulatedData, cfg.StaleAfter, a.Reg, a.Writer, a.Cmds, a.Hub, a.Metrics, log)
-	ingest.SyncOutbox = cfg.CloudSyncEnabled
+	ingest.SetSyncOutbox(cfg.CloudSyncEnabled)
 	a.Ingest = ingest
 	var cloud httpapi.CloudLink
 	if cfg.CloudSyncEnabled {
 		a.Sync = edgesync.NewWorker(edgesync.Options{SiteID: cfg.SiteID, URL: cfg.CloudURL, Token: cfg.CloudToken, Interval: cfg.CloudSyncInterval, EdgeVersion: "edge-" + Version, RemotePrograms: cfg.RemotePrograms}, db, a.Cmds, nil, log)
 		cloud = a.Sync
 	}
-	a.HTTP = httpapi.New(httpapi.Deps{Cfg: cfg, DB: db, Auth: a.Auth, Reg: a.Reg, Cmds: a.Cmds, Hub: a.Hub, Metrics: a.Metrics, Writer: a.Writer, MQTT: a.MQTT, Cloud: cloud, Pairing: a.Pair, Broker: a.Broker, Ranges: a.Ranges, Static: static.FS, Log: log})
+	a.HTTP = httpapi.New(httpapi.Deps{Cfg: cfg, DB: db, Auth: a.Auth, Reg: a.Reg, Cmds: a.Cmds, Hub: a.Hub, Metrics: a.Metrics, Writer: a.Writer, MQTT: a.MQTT, Cloud: cloud, Pairing: a.Pair, Broker: a.Broker, Ranges: a.Ranges, Linker: a, Static: static.FS, Log: log})
 	if a.Sync != nil {
 		a.Sync.SetStateFunc(a.HTTP.Snapshot)
+	} else if err := a.loadStoredLink(ctx); err != nil {
+		return nil, err
 	}
 	if a.ln, err = net.Listen("tcp", cfg.HTTPAddr); err != nil {
 		return nil, err
@@ -208,12 +215,18 @@ func (a *App) Run(ctx context.Context) error {
 	writerWG.Add(1)
 	go func() { defer writerWG.Done(); a.Writer.Run(writerCtx) }()
 
+	a.linkMu.Lock()
+	a.wctx, a.spawn = wctx, spawn
+	if a.Sync != nil { // configured by env or a stored link; cancellable so the Pi can be disconnected
+		sctx, cancel := context.WithCancel(wctx)
+		a.syncCancel = cancel
+		w := a.Sync
+		spawn(func(context.Context) { w.Run(sctx) })
+	}
+	a.linkMu.Unlock()
 	spawn(a.Cmds.Run)
 	spawn(a.Ingest.Watchdog)
 	spawn(a.retention)
-	if a.Sync != nil {
-		spawn(a.Sync.Run)
-	}
 	a.MQTT.Start()
 
 	a.Log.Info("edge service ready", "http", a.Addr(), "site", a.Cfg.SiteID, "simulated_data_accepted", a.Cfg.AllowSimulatedData)

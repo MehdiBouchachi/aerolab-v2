@@ -18,12 +18,18 @@ type Config struct {
 	// IntentTTL: how long a remote programme request may wait for the Pi.
 	IntentTTL time.Duration
 	LogLevel  string
+	// Signup: "closed" (default; accounts are created by an operator, e.g. a government or enterprise
+	// deployment) or "open" (anyone can create an account and an organisation, e.g. a consumer service).
+	Signup string
+	// ClaimTTL: how long a "connect a Pi" code stays valid.
+	ClaimTTL time.Duration
 }
 
 func Load() (*Config, error) {
 	c := &Config{HTTPAddr: get("AEROLAB_CLOUD_HTTP_ADDR", "127.0.0.1:8090"), DatabaseURL: os.Getenv("AEROLAB_CLOUD_DATABASE_URL"),
 		CookieSecure: get("AEROLAB_CLOUD_COOKIE_SECURE", "true") != "false", StaticDir: os.Getenv("AEROLAB_CLOUD_STATIC_DIR"),
-		StaleAfter: 90 * time.Second, IntentTTL: 2 * time.Minute, LogLevel: get("AEROLAB_LOG_LEVEL", "info")}
+		StaleAfter: 90 * time.Second, IntentTTL: 2 * time.Minute, LogLevel: get("AEROLAB_LOG_LEVEL", "info"),
+		Signup: get("AEROLAB_CLOUD_SIGNUP", "closed"), ClaimTTL: 24 * time.Hour}
 	var err error
 	if v := os.Getenv("AEROLAB_CLOUD_STALE_AFTER"); v != "" {
 		if c.StaleAfter, err = time.ParseDuration(v); err != nil {
@@ -36,6 +42,9 @@ func Load() (*Config, error) {
 		}
 	}
 	_ = strconv.Itoa
+	if c.Signup != "open" && c.Signup != "closed" {
+		return nil, fmt.Errorf("AEROLAB_CLOUD_SIGNUP must be open or closed")
+	}
 	if c.DatabaseURL == "" {
 		return nil, fmt.Errorf("AEROLAB_CLOUD_DATABASE_URL is required")
 	}

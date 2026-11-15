@@ -134,6 +134,10 @@ paths:
     get: { x-surface: edge-only, x-min-role: ADMIN, summary: Registered devices, responses: { '200': { description: ok } } }
     post: { x-surface: edge-only, x-min-role: ADMIN, summary: Register a device + unit (no secrets handled), responses: { '201': { description: created } } }
   # ---- self-service fleet management (docs/architecture/fleet-management.md)
+  /api/v1/cloud-link:
+    get: { x-surface: edge-only, x-min-role: ADMIN, summary: "This Pi's cloud connection (never the token) and observed sync status", responses: { '200': { description: ok } } }
+    post: { x-surface: edge-only, x-min-role: ADMIN, summary: "Connect this Pi to a cloud: body {cloud_url, code}. The Pi exchanges the one-time code for its own token and starts syncing without a restart", responses: { '201': { description: linked }, '400': { description: INVALID_CLAIM_CODE / VALIDATION_FAILED }, '409': { description: ALREADY_LINKED / SITE_ID_TAKEN / CONFIGURED_BY_INSTALLER }, '502': { description: CLOUD_UNREACHABLE } } }
+    delete: { x-surface: edge-only, x-min-role: ADMIN, summary: "Disconnect from the cloud (stop syncing, forget the token)", responses: { '204': { description: disconnected } } }
   /api/v1/units/{unitId}/retire:
     post: { x-surface: edge-only, x-min-role: ADMIN, summary: "Retire a unit (body confirm_name = exact unit name); its broker credential is withdrawn, history kept", responses: { '200': { description: retired }, '400': { description: confirmation mismatch } } }
   /api/v1/units/{unitId}/setup-code:

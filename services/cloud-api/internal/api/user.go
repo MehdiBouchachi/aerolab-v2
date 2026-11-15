@@ -17,6 +17,7 @@ import (
 )
 
 func (s *Server) register() {
+	s.registerFleet()
 	s.handle("GET", "/healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
 	s.handle("GET", "/readyz", func(w http.ResponseWriter, r *http.Request) {
 		ok := s.DB.PingContext(r.Context()) == nil

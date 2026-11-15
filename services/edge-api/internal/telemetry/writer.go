@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	mc "github.com/mehdibouchachi/aerolab-v2/contracts/mqtt"
@@ -75,16 +76,21 @@ type Writer struct {
 	m          *diagnostics.Metrics
 	log        *slog.Logger
 	siteID     string
-	syncOutbox bool
+	syncOutbox atomic.Bool // enqueue for the cloud; flipped at runtime when the Pi is connected
 }
 
 func NewWriter(db *storage.Store, pub Publisher, hub *sse.Hub, m *diagnostics.Metrics, log *slog.Logger, siteID string, queue int, syncOutbox bool) *Writer {
-	return &Writer{db: db, recs: make(chan recordJob, queue), ops: make(chan Op, 512), pub: pub, hub: hub, m: m, log: log, siteID: siteID, syncOutbox: syncOutbox}
+	w := &Writer{db: db, recs: make(chan recordJob, queue), ops: make(chan Op, 512), pub: pub, hub: hub, m: m, log: log, siteID: siteID}
+	w.syncOutbox.Store(syncOutbox)
+	return w
 }
 
 // Enqueue never blocks the MQTT dispatcher. A full queue drops the record:
 // no receipt is issued, so the device keeps it and re-sends (bounded memory
 // on the Pi, durability on the device).
+// SetSyncOutbox turns cloud outbox writes on or off (Pi connected/disconnected at runtime).
+func (w *Writer) SetSyncOutbox(on bool) { w.syncOutbox.Store(on) }
+
 func (w *Writer) enqueue(j recordJob) bool {
 	select {
 	case w.recs <- j:
@@ -231,7 +237,7 @@ func (w *Writer) commitBatch(ctx context.Context, batch []recordJob) {
 				dup++ // already durable from an earlier delivery: still safe to ack
 			} else {
 				persisted++
-				if w.syncOutbox {
+				if w.syncOutbox.Load() {
 					if err := w.outbox(ctx, tx, j, eventID); err != nil {
 						return err
 					}
@@ -360,7 +366,7 @@ func (w *Writer) RangeOp(ts []crops.Transition) Op {
 			if c == nil {
 				continue
 			}
-			if w.syncOutbox {
+			if w.syncOutbox.Load() {
 				if err := edgesync.EnqueueIncident(ctx, tx, w.siteID, c.Incident); err != nil {
 					return nil, err
 				}
@@ -412,7 +418,7 @@ func (w *Writer) reconstructOp(device, unit, boot, code string) Op {
 						return nil, err
 					}
 					if c != nil {
-						if w.syncOutbox {
+						if w.syncOutbox.Load() {
 							if err := edgesync.EnqueueIncident(ctx, tx, w.siteID, c.Incident); err != nil {
 								return nil, err
 							}
