@@ -406,3 +406,30 @@ func TestUnchangedStateIsNotReUploadedEveryCycle(t *testing.T) {
 		t.Fatal("state not re-sent after a failure")
 	}
 }
+
+// A brief controller outage must not turn a valid remote request into a rejection: it waits (PENDING_SITE)
+// and is applied once the controller is back, or expires on its own.
+func TestRemoteIntentWaitsWhileControllerIsOfflineThenProceeds(t *testing.T) {
+	r := newRig(t, true)
+	// no heartbeat yet: the controller is not reporting
+	r.intent("cmd-remote-0100", 0, nil)
+	if _, err := r.w.cycle(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, res := r.f.take(); len(res) != 0 {
+		t.Fatalf("a transient DEVICE_OFFLINE was reported to the cloud as final: %+v", res)
+	}
+	var n int
+	_ = r.db.R.QueryRow(`SELECT COUNT(*) FROM commands`).Scan(&n)
+	if n != 0 {
+		t.Fatal("a command was created for an offline controller")
+	}
+	// the cloud offers it again next cycle; now the controller is back
+	r.heartbeat(0)
+	r.intent("cmd-remote-0100", 0, nil)
+	_, _ = r.w.cycle(context.Background())
+	_, _ = r.w.cycle(context.Background())
+	if res := r.lastResult(t, "cmd-remote-0100"); res.Status != sc.IntentPendingDevice {
+		t.Fatalf("%+v", res)
+	}
+}

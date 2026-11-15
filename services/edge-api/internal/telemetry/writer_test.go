@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,3 +190,102 @@ func TestEffectiveTimeNeverFabricatesAndLabelsEstimates(t *testing.T) {
 }
 
 func itoa(n int) string { b, _ := json.Marshal(n); return string(b) }
+
+func faultEv(seq int64, typ mc.EventType, code string, at time.Time) recordJob {
+	u := "unit-test-001"
+	e := &mc.Event{Header: mc.Header{SchemaVersion: 1, SiteID: "site-test-01", DeviceID: "esp32-test-001", UnitID: &u, BootID: "boot-aaaaaaaa", DataSource: mc.SourceSimulator},
+		Type: "event", Seq: seq, UptimeMS: seq * 1000, ClockQuality: mc.ClockMonotonicOnly, EventType: typ, Severity: mc.SevCritical, Code: code}
+	return recordJob{kind: kindEvent, siteID: "site-test-01", deviceID: "esp32-test-001", unitID: u, bootID: "boot-aaaaaaaa", seq: seq,
+		source: "SIMULATOR", received: at, effective: at, timeQ: "ESTIMATED_FROM_UPTIME", ev: e}
+}
+
+func drainOps(w *Writer) {
+	for len(w.ops) > 0 {
+		w.runOp(context.Background(), <-w.ops)
+	}
+}
+
+func provisionUnit(t *testing.T, db *storage.Store) {
+	if _, err := db.W.Exec(`INSERT INTO growing_units(id,site_id,name,created_at) VALUES ('unit-test-001','site-test-01','U1',?)`, storage.Now()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func incidentRows(t *testing.T, db *storage.Store) []map[string]string {
+	rows, _ := db.R.Query(`SELECT code,status,first_seen_at,COALESCE(resolved_at,''),details_json FROM incidents ORDER BY first_seen_at`)
+	defer rows.Close()
+	var out []map[string]string
+	for rows.Next() {
+		var c, s, f, r, d string
+		_ = rows.Scan(&c, &s, &f, &r, &d)
+		out = append(out, map[string]string{"code": c, "status": s, "first": f, "resolved": r, "details": d})
+	}
+	return out
+}
+
+// A fault that began AND ended while the site could not be observed live must still appear in history,
+// resolved, with the controller's own event times - not vanish because the heartbeat never showed it.
+func TestOutageOnlyFaultIsReconstructedFromReplayedEvents(t *testing.T) {
+	w, _, _, db := newW(t)
+	provisionUnit(t, db)
+	ctx := context.Background()
+	t0 := time.Now().Add(-10 * time.Minute)
+	w.commitBatch(ctx, []recordJob{faultEv(5, mc.EventFaultRaised, "LOW_WATER", t0), faultEv(9, mc.EventFaultCleared, "LOW_WATER", t0.Add(3*time.Minute))})
+	drainOps(w)
+	got := incidentRows(t, db)
+	if len(got) != 1 || got[0]["code"] != "LOW_WATER" || got[0]["status"] != "RESOLVED_UNACKNOWLEDGED" {
+		t.Fatalf("%v", got)
+	}
+	if got[0]["first"] != storage.FormatTime(t0) || got[0]["resolved"] != storage.FormatTime(t0.Add(3*time.Minute)) {
+		t.Fatalf("event times not preserved: %v", got[0])
+	}
+	if !strings.Contains(got[0]["details"], "reconstructed_from_events") {
+		t.Fatal("not marked as reconstructed")
+	}
+	// replay of the same events (lost receipt) creates nothing new
+	w.commitBatch(ctx, []recordJob{faultEv(5, mc.EventFaultRaised, "LOW_WATER", t0), faultEv(9, mc.EventFaultCleared, "LOW_WATER", t0.Add(3*time.Minute))})
+	drainOps(w)
+	if n := len(incidentRows(t, db)); n != 1 {
+		t.Fatalf("replay duplicated the incident: %d", n)
+	}
+}
+
+func TestReconstructionWorksInEitherArrivalOrderAndSkipsWhatTheLivePathSaw(t *testing.T) {
+	w, _, _, db := newW(t)
+	provisionUnit(t, db)
+	ctx := context.Background()
+	t0 := time.Now().Add(-time.Hour)
+	// CLEARED arrives in an earlier batch than RAISED (replay ordering): nothing until the pair is complete
+	w.commitBatch(ctx, []recordJob{faultEv(21, mc.EventFaultCleared, "PH_INVALID", t0.Add(time.Minute))})
+	drainOps(w)
+	if n := len(incidentRows(t, db)); n != 0 {
+		t.Fatalf("an incomplete pair created %d incidents", n)
+	}
+	w.commitBatch(ctx, []recordJob{faultEv(20, mc.EventFaultRaised, "PH_INVALID", t0)})
+	drainOps(w)
+	if n := len(incidentRows(t, db)); n != 1 {
+		t.Fatalf("pair completed out of order: %d incidents", n)
+	}
+	// the live path already has an incident overlapping the interval -> no duplicate
+	db.W.Exec(`INSERT INTO incidents(id,site_id,unit_id,severity,code,status,first_seen_at,last_seen_at,resolved_at) VALUES ('live','site-test-01','unit-test-001','critical','LOW_WATER','RESOLVED_UNACKNOWLEDGED',?,?,?)`,
+		storage.FormatTime(t0.Add(10*time.Minute)), storage.FormatTime(t0.Add(12*time.Minute)), storage.FormatTime(t0.Add(12*time.Minute)))
+	w.commitBatch(ctx, []recordJob{faultEv(30, mc.EventFaultRaised, "LOW_WATER", t0.Add(10*time.Minute)), faultEv(31, mc.EventFaultCleared, "LOW_WATER", t0.Add(12*time.Minute))})
+	drainOps(w)
+	n := 0
+	for _, r := range incidentRows(t, db) {
+		if r["code"] == "LOW_WATER" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("the live incident was duplicated by reconstruction: %d LOW_WATER rows", n)
+	}
+	// a fault raised but NOT yet cleared is the live path's job: nothing reconstructed
+	w.commitBatch(ctx, []recordJob{faultEv(40, mc.EventFaultRaised, "EC_INVALID", t0.Add(20*time.Minute))})
+	drainOps(w)
+	for _, r := range incidentRows(t, db) {
+		if r["code"] == "EC_INVALID" {
+			t.Fatal("an open fault was reconstructed as resolved")
+		}
+	}
+}

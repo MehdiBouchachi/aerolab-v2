@@ -60,6 +60,8 @@ type Worker struct {
 	status CloudStatus
 	kick   chan struct{}
 
+	waiting map[string]string // intents being retried (id -> reason), only to log once; bounded below
+
 	// last state snapshot the cloud acknowledged (only touched by the Run goroutine)
 	lastFP     string
 	lastSentAt time.Time
@@ -343,6 +345,10 @@ func (w *Worker) handleIntent(ctx context.Context, in sc.Intent) {
 			switch ce.Code {
 			case "PROGRAM_VERSION_CONFLICT":
 				reject(sc.IntentConflict, "PROGRAM_VERSION_CONFLICT")
+			case "DEVICE_OFFLINE", "COMMAND_PENDING":
+				// Transient: the controller is briefly unreachable, or a change is still in flight. Leave the
+				// request PENDING_SITE and try again next cycle; it expires (and never runs late) on its own.
+				w.noteWaiting(in.ID, ce.Code)
 			default:
 				reject(sc.IntentRejected, ce.Code)
 			}
@@ -403,5 +409,15 @@ func (w *Worker) Kick() {
 	select {
 	case w.kick <- struct{}{}:
 	default:
+	}
+}
+
+func (w *Worker) noteWaiting(id, reason string) {
+	if w.waiting == nil || len(w.waiting) > 256 {
+		w.waiting = map[string]string{}
+	}
+	if w.waiting[id] != reason {
+		w.waiting[id] = reason
+		w.log.Info("remote programme request waiting for the controller; will retry until it expires", "id", id, "reason", reason)
 	}
 }

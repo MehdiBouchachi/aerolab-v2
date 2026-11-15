@@ -26,6 +26,7 @@ export function Incidents() {
             <Badge tone={i.severity === 'critical' ? 'crit' : i.severity === 'warning' ? 'warn' : 'muted'}>{i.severity}</Badge> <b>{i.title}</b> — <Link to={`/units/${i.unit_id}`}>{i.unit_id}</Link>
             <div>{i.cause}</div>
             <div className="muted">What to do: {i.suggested_action}</div>
+            {i.note && <div className="note warn small">{i.note}</div>}
             <div className="muted small">First seen {clock(i.first_seen_at)} · last seen {ago(i.last_seen_at)} · {i.status.replace(/_/g, ' ').toLowerCase()}{i.resolved_at && ` · resolved ${clock(i.resolved_at)}`}</div>
             {i.status.endsWith('UNACKNOWLEDGED') && can('ack_incident') && <button onClick={() => void ack(i.id)}>Acknowledge – I have seen this</button>}
           </li>))}

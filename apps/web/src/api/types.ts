@@ -30,6 +30,7 @@ export interface Incident {
   title: string; cause: string; suggested_action: string
   first_seen_at: string; last_seen_at: string; occurrences: number
   acknowledged_by: string | null; acknowledged_at: string | null; resolved_at: string | null
+  note?: string
 }
 export interface SiteRef { id: string; name: string; role: Role; stale?: boolean; last_sync_at?: string | null }
 export interface Session {

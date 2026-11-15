@@ -22,8 +22,10 @@ import (
 	sc "github.com/mehdibouchachi/aerolab-v2/contracts/sync"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/auth"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/diagnostics"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/incidents"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sse"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/storage"
+	edgesync "github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/sync"
 )
 
 // Publisher sends receipts.
@@ -180,10 +182,12 @@ func (w *Writer) commitBatch(ctx context.Context, batch []recordJob) {
 	acked := map[devBoot][]int64{}
 	rejected := map[devBoot][]int64{}
 	latest := map[string]*recordJob{} // newest telemetry per unit, for SSE
+	var faultEvents []*recordJob      // newly stored FAULT_RAISED/CLEARED: may complete an outage-only fault
 	var persisted, dup int64
 
 	err := w.db.IngestTx(ctx, func(tx *sql.Tx) error {
 		persisted, dup = 0, 0
+		faultEvents = faultEvents[:0]
 		for k := range acked {
 			delete(acked, k)
 		}
@@ -231,6 +235,9 @@ func (w *Writer) commitBatch(ctx context.Context, batch []recordJob) {
 				}
 			}
 			acked[key] = append(acked[key], j.seq)
+			if n > 0 && j.kind == kindEvent && j.unitID != "" && (j.ev.EventType == mc.EventFaultRaised || j.ev.EventType == mc.EventFaultCleared) {
+				faultEvents = append(faultEvents, j)
+			}
 			if j.kind == kindTelemetry && j.unitID != "" {
 				if cur := latest[j.unitID]; cur == nil || j.effective.After(cur.effective) {
 					latest[j.unitID] = j
@@ -251,6 +258,9 @@ func (w *Writer) commitBatch(ctx context.Context, batch []recordJob) {
 	w.m.LastCommitMicros.Store(time.Since(start).Microseconds())
 	w.sendReceipts(batch, acked, rejected)
 
+	for _, j := range faultEvents {
+		w.Do(w.reconstructOp(j.deviceID, j.unitID, j.bootID, j.ev.Code))
+	}
 	for unit, j := range latest {
 		w.hub.Publish("unit.reading", map[string]any{"unit_id": unit, "effective_at_utc": storage.FormatTime(j.effective),
 			"time_quality": j.timeQ, "data_source": j.source, "readings": j.tel.Readings})
@@ -324,3 +334,59 @@ func nullIfEmpty(s string) any {
 }
 
 var _ = strings.TrimSpace
+
+// reconstructOp pairs a stored FAULT_RAISED with the first later FAULT_CLEARED of the same code in the
+// same boot (they may arrive in either order during a replay) and records an outage-only fault.
+func (w *Writer) reconstructOp(device, unit, boot, code string) Op {
+	return Op{Name: "incidents.reconstruct", Fn: func(ctx context.Context, tx *sql.Tx) (func(), error) {
+		rows, err := tx.QueryContext(ctx, `SELECT sequence_number,event_type,effective_at_utc,time_quality FROM device_events
+			WHERE device_id=? AND boot_id=? AND code=? AND event_type IN ('FAULT_RAISED','FAULT_CLEARED') ORDER BY sequence_number`, device, boot, code)
+		if err != nil {
+			return nil, err
+		}
+		type ev struct{ typ, at, tq string }
+		var evs []ev
+		for rows.Next() {
+			var seq int64
+			var e ev
+			if err := rows.Scan(&seq, &e.typ, &e.at, &e.tq); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			evs = append(evs, e)
+		}
+		rows.Close()
+		var changes []incidents.Change
+		for i := 0; i < len(evs); i++ {
+			if evs[i].typ != string(mc.EventFaultRaised) {
+				continue
+			}
+			for k := i + 1; k < len(evs); k++ {
+				if evs[k].typ == string(mc.EventFaultCleared) {
+					tq := evs[i].tq
+					if evs[k].tq != "DEVICE_CLOCK" {
+						tq = evs[k].tq
+					}
+					c, err := incidents.ReconstructFromEvents(ctx, tx, w.siteID, unit, code, evs[i].at, evs[k].at, tq)
+					if err != nil {
+						return nil, err
+					}
+					if c != nil {
+						if w.syncOutbox {
+							if err := edgesync.EnqueueIncident(ctx, tx, w.siteID, c.Incident); err != nil {
+								return nil, err
+							}
+						}
+						changes = append(changes, *c)
+					}
+					break
+				}
+			}
+		}
+		return func() {
+			for _, c := range changes {
+				w.hub.Publish("incident.updated", c.Incident)
+			}
+		}, nil
+	}}
+}

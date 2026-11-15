@@ -108,6 +108,7 @@ type IncidentUpdate struct {
 	AcknowledgedBy  *string `json:"acknowledged_by"`
 	AcknowledgedAt  *string `json:"acknowledged_at"`
 	ResolvedAt      *string `json:"resolved_at"`
+	Note            string  `json:"note,omitempty"`
 	ChangedAt       string  `json:"changed_at"`
 }
 
