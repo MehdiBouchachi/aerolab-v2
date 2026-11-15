@@ -20,6 +20,8 @@ interface Ctx {
   setMode: (m: Mode) => Promise<void>
   setCloudUrl: (url: string) => Promise<void>
   signedIn: (source: 'local' | 'cloud', username: string, token: string) => Promise<void>
+  /** Forget this phone's token for one source; cached data stays readable, marked as cached. */
+  signOut: (source: 'local' | 'cloud') => Promise<void>
   env: Env
 }
 const C = createContext<Ctx | null>(null)
@@ -85,6 +87,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async signedIn(source, username, token) {
       if (!pairing) return
       await tokens.set(pairing.siteId, source, token); await cacheStore.set(USER + pairing.siteId + '|' + source, username)
+      await refresh()
+    },
+    async signOut(source) {
+      if (!pairing) return
+      await tokens.clear(pairing.siteId, source)
       await refresh()
     },
   }

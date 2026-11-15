@@ -18,9 +18,18 @@ build was available. Treat every screen as untested until it has run on Android 
   in-flight requests and discards late responses; relabelled cache records are dropped; a 401 clears only that
   source's token; `post()` refuses unless live.
 
+## UI
+The screens follow the web dashboard on phones (`DESIGN.md`): the same colour tokens in light and dark (`src/ui/theme.tsx`,
+following the phone setting, overridable under Account), the same outline icons (`react-native-svg`), a top bar with
+back button, a status strip (source, freshness, SIMULATED), bottom tabs (Overview, Alerts, Account), the four-number
+summary, the same unit cards, unit sections Overview / History / Programme, and Alerts with Active / History.
+Unit, history and programme requests use source-aware paths (`src/ui/format.ts` `paths()`): the Pi serves
+`/api/v1/units/{id}`, the cloud `/api/v1/sites/{site}/units/{id}`. The programme is read-only in the app; changes
+are made from the web dashboard. Alerts can be acknowledged only while the connection is live.
+
 ## What is written but unverified on a device
 `src/native.ts` (SecureStore keychain adapter, AsyncStorage adapter, expo-crypto RNG), all screens
-(`src/ui`), camera QR scanning (`expo-camera`), `App.tsx`. Not built/verified: push notifications (none — no push
+(`src/ui`, typechecked, formatting/path/history helpers unit-tested, never rendered), camera QR scanning (`expo-camera`), `App.tsx`. Not built/verified: push notifications (none — no push
 service is configured, and none is promised), live SSE (the app polls every 10 s; RN streaming fetch not relied on),
 crop records/harvest (no backend yet), local TLS trust (the app accepts `https://` anywhere and `http://` only on
 private/lab addresses, flagged "unencrypted lab link"; a local CA/trust story is still open), Android cleartext /
