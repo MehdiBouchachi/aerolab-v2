@@ -49,6 +49,7 @@ export function Chart({ title, unit, points, gaps, from, to, keyName }: {
         {segs.map((s, i) => s.length === 1
           ? <circle key={i} cx={x(s[0].t)} cy={y(s[0].v)} r={2.5} className="dot" />
           : <polyline key={i} className="line" fill="none" points={s.map(p => `${x(p.t)},${y(p.v)}`).join(' ')} />)}
+        <circle cx={x(pts[pts.length - 1].t)} cy={y(pts[pts.length - 1].v)} r={3.5} className="dot"><title>Last plotted value: {pts[pts.length - 1].v}</title></circle>
         {invalid.map(t => <line key={t} x1={x(t)} x2={x(t)} y1={H - B} y2={H - B - 6} className="bad"><title>invalid or missing reading</title></line>)}
         <text x={L} y={H - 6} className="axis">{new Date(t0).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</text>
         <text x={W - R} y={H - 6} textAnchor="end" className="axis">{new Date(t1).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</text>
