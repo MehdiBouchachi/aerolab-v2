@@ -24,8 +24,6 @@ Legend: ✅ done and tested here · 🟡 done, partially verified · ⛔ not sta
 | Docker Compose dev stack | ⛔ removed (would not have worked); `make dev-stack` is the path | – |
 
 ## Known gaps / limitations in Phase 1 (deliberate or discovered)
-* A fault that starts **and** ends entirely during an outage is stored in `device_events` but does not retro-create an
-  incident (incidents follow heartbeats). Needs an in-order event→incident reconciler.
 * History/exports: history API exists; CSV/JSON **export** endpoint, crop batches/journal/harvest, calibration,
   pairing, backups endpoint, `/storage` retention jobs beyond the hourly delete: not implemented.
 * Edge does not probe the WAN: `site_wan_reachable` / `cloud_api_reachable` are reported `null` (unknown).
@@ -58,8 +56,7 @@ Legend: ✅ done and tested here · 🟡 done, partially verified · ⛔ not sta
   (only the controller-reported version), SSE not implemented (polling).
 * Edge sync: outbox rows for telemetry are written only when sync is enabled; a site enabled after months offline starts from "now"
   (no backfill of older SQLite history). Incident updates and device events are enqueued; crop records do not exist yet.
-* Remote requests: `DEVICE_OFFLINE` at the Pi is reported back as REJECTED (not retried until expiry).
-* Firmware: Wi-Fi bring-up and credential provisioning are not written; journal index is not rebuilt after a reboot; only the level input
+* Firmware: Wi-Fi bring-up and credential provisioning are not written; only the level input
   has a driver; no OTA; RTC/NTP absent (monotonic only).
 * Mobile: no push, no SSE, no crop entry, no local TLS trust story; Expo module versions pinned from npm tags (could not run `expo install`).
 * Not done at all (Phase 6): Pi install on real hardware, 24 h soak, backups/restore scripts, TLS everywhere, Terraform, release pipeline.
@@ -72,3 +69,24 @@ cloud advertised an `ack_incident` capability it had no endpoint for.
 
 ## Bug found and fixed while extending the tests
 The simulator's network link did not notice a locally dropped socket (only the 10 s MQTT keep-alive would), so after a simulated reset or Wi-Fi drop a device could keep publishing into a dead connection. Fixed; covered by the reboot and Wi-Fi integration tests.
+
+## Review pass 2026-11-15
+Checked every phase with `staticcheck` (now clean on all 6 Go modules), the full regression and browser checks.
+`govulncheck` could not run: its vulnerability database is blocked by this environment's network proxy.
+
+Fixed:
+* **Cloud** kept units that were removed at the site forever (found by staticcheck SA4010). Now removed, but only on a
+  snapshot the edge marks `units_complete`.
+* **Outage-only faults**: a fault that started and ended while the Pi could not observe live left no incident. Replayed
+  `FAULT_RAISED`/`FAULT_CLEARED` pairs now create a resolved incident with the event times, marked as reconstructed
+  (shown in the UI, synced to the cloud), never duplicating a live one. Tested in unit, integration and the browser.
+* **Remote requests** for a briefly offline controller were rejected; they now wait until their own expiry.
+* **Retention** only ran 1 h after start (a Pi rebooting daily never pruned); now 1 min after start, then hourly.
+* **Firmware** journal: records buffered before a reset were invisible after it; `mb_restore` rebuilds the index (host-tested).
+* **Docker**: non-POSIX `wait -n` replaced (behaviour-tested with stubs under `dash`); web stage installs only the web
+  app (568 -> 150 packages); no default cloud admin password; cloud bound to 127.0.0.1 by default. *Images were not
+  built: no Docker daemon in this environment.*
+* **Test harness** leaked a DB pool per poll (PostgreSQL "too many clients") - the cause of an intermittent failure.
+
+Efficiency: see `docs/performance/efficiency-2026-11-15.md` (unit list ~48% faster, sync snapshot ~44% faster, unchanged
+sync state no longer re-uploaded, -13% initial web JS; an ingest change with no measurable gain was reverted).
