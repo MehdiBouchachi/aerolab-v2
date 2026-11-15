@@ -651,3 +651,6 @@ func (p *Program) Validate() error {
 	}
 	return nil
 }
+
+// ValidReadingName reports whether s is a legal telemetry reading name.
+func ValidReadingName(s string) bool { return readingNameRe.MatchString(s) }

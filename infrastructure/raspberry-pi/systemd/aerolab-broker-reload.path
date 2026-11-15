@@ -1,0 +1,13 @@
+# STATUS: written for Raspberry Pi OS (Debian bookworm, mosquitto 2.x); NOT yet tested on a Pi.
+# The edge rewrites the controller credential file when a grower adds or retires a unit from the
+# dashboard. This unit reloads Mosquitto when that file changes, so the edge itself needs no
+# privileges over the broker.
+[Unit]
+Description=Reload Mosquitto when AeroLab changes controller credentials
+
+[Path]
+PathChanged=/var/lib/aerolab-broker/passwd
+Unit=aerolab-broker-reload.service
+
+[Install]
+WantedBy=multi-user.target

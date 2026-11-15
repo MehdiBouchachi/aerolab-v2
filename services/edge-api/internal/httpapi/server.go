@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/broker"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/crops"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -50,6 +52,8 @@ type Deps struct {
 	MQTT    MQTTStatus
 	Cloud   CloudLink // nil when cloud sync is disabled
 	Pairing *pairing.Service
+	Broker  *broker.Manager  // nil/disabled: controllers are added by the installer only
+	Ranges  *crops.Evaluator // crop-profile range alerts (nil disables them)
 	Static  fs.FS
 	Log     *slog.Logger
 }

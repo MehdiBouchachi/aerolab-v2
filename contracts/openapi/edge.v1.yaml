@@ -86,8 +86,10 @@ paths:
     get: { x-surface: shared, x-min-role: VIEWER, summary: Counts, connectivity (separate facts), incidents, responses: { '200': { description: ok } } }
   /api/v1/sites/{siteId}/units:
     get: { x-surface: shared, x-min-role: VIEWER, summary: Paged units with connection/controller state, responses: { '200': { description: ok } } }
+    post: { x-surface: edge-only, x-min-role: ADMIN, summary: "Add a unit: body {name, crop_profile_id?}. The Pi creates the controller identity and broker credential and returns setup_code ONCE (409 BROKER_NOT_MANAGED if this Pi cannot manage broker credentials)", responses: { '201': { description: unit + one-time setup code } } }
   /api/v1/units/{unitId}:
     get: { x-surface: shared, x-min-role: VIEWER, summary: Unit detail, responses: { '200': { description: ok }, '404': { description: unknown unit } } }
+    patch: { x-surface: edge-only, x-min-role: ADMIN, summary: "Rename a unit: body {name}", responses: { '204': { description: renamed } } }
   /api/v1/units/{unitId}/readings/latest:
     get: { x-surface: shared, x-min-role: VIEWER, summary: Latest snapshot with quality + age, responses: { '200': { description: ok } } }
   /api/v1/units/{unitId}/readings/history:
@@ -131,6 +133,20 @@ paths:
   /api/v1/sites/{siteId}/devices:
     get: { x-surface: edge-only, x-min-role: ADMIN, summary: Registered devices, responses: { '200': { description: ok } } }
     post: { x-surface: edge-only, x-min-role: ADMIN, summary: Register a device + unit (no secrets handled), responses: { '201': { description: created } } }
+  # ---- self-service fleet management (docs/architecture/fleet-management.md)
+  /api/v1/units/{unitId}/retire:
+    post: { x-surface: edge-only, x-min-role: ADMIN, summary: "Retire a unit (body confirm_name = exact unit name); its broker credential is withdrawn, history kept", responses: { '200': { description: retired }, '400': { description: confirmation mismatch } } }
+  /api/v1/units/{unitId}/setup-code:
+    post: { x-surface: edge-only, x-min-role: ADMIN, summary: "Issue a new controller setup code (replaces the previous broker password; shown once)", responses: { '200': { description: new setup code }, '409': { description: BROKER_NOT_MANAGED } } }
+  /api/v1/units/{unitId}/crop-profile:
+    put: { x-surface: edge-only, x-min-role: ADMIN, summary: "Assign (crop_profile_id) or clear (\"\") a unit's crop profile. Does not send a programme.", responses: { '204': { description: assigned } } }
+  /api/v1/sites/{siteId}/crop-profiles:
+    get: { x-surface: edge-only, x-min-role: VIEWER, summary: "Crop profiles (all values grower-entered; no presets ship)", responses: { '200': { description: ok } } }
+    post: { x-surface: edge-only, x-min-role: ADMIN, summary: "Create a crop profile: name, crop, variety, notes, value_source (required), thresholds {reading: {min,max}}, optional program", responses: { '201': { description: created }, '400': { description: VALIDATION_FAILED } } }
+  /api/v1/crop-profiles/{profileId}:
+    get: { x-surface: edge-only, x-min-role: VIEWER, summary: Crop profile, responses: { '200': { description: ok } } }
+    put: { x-surface: edge-only, x-min-role: ADMIN, summary: "Replace a crop profile; expected_version required (409 VERSION_CONFLICT if someone else saved first)", responses: { '200': { description: updated }, '409': { description: VERSION_CONFLICT } } }
+    delete: { x-surface: edge-only, x-min-role: ADMIN, summary: Archive an unused crop profile, responses: { '204': { description: archived }, '409': { description: still assigned } } }
   /api/v1/sites/{siteId}/storage:
     get: { x-surface: edge-only, x-min-role: VIEWER, summary: Capacity, retention, sync, responses: { '200': { description: ok } } }
   /api/v1/sites/{siteId}/audit:

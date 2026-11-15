@@ -68,6 +68,7 @@ func (s *Server) register() {
 	s.protected("GET", "/api/v1/diagnostics", roles.ViewDiagnostics, s.diag)
 	s.protected("POST", "/api/v1/site-pairing/start", roles.ManageDevices, s.pairStart)
 
+	s.registerFleet()
 	s.mux.Handle("/", s.staticHandler())
 }
 
@@ -224,6 +225,16 @@ type unitView struct {
 	Buffer              *mc.BufferStatus `json:"controller_buffer"`
 	ActiveIncidents     map[string]int   `json:"active_incidents"`
 	LatestReadings      *readingView     `json:"latest_readings"`
+	Crop                *cropRef         `json:"crop"` // null: no crop profile assigned
+}
+
+// cropRef is what a unit list needs to say what grows in it (the cloud shows it across sites).
+type cropRef struct {
+	ProfileID   string `json:"profile_id"`
+	ProfileName string `json:"profile_name"`
+	Crop        string `json:"crop"`
+	Variety     string `json:"variety,omitempty"`
+	AssignedAt  string `json:"assigned_at"`
 }
 
 type readingView struct {
@@ -338,6 +349,23 @@ func (s *Server) buildUnits(ctx context.Context, refs []unitRef, withReadings bo
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
+	rows, err = s.DB.R.QueryContext(ctx, `SELECT g.id, p.id, p.name, p.crop, COALESCE(p.variety,''), COALESCE(g.crop_assigned_at,'')
+		FROM growing_units g JOIN crop_profiles p ON p.id = g.crop_profile_id WHERE g.site_id=? AND g.id IN (`+in+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var u string
+		var c cropRef
+		if err := rows.Scan(&u, &c.ProfileID, &c.ProfileName, &c.Crop, &c.Variety, &c.AssignedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out[idx[u]].Crop = &c
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
 	if !withReadings {
 		return out, nil
 	}
@@ -382,7 +410,7 @@ func (s *Server) listUnits(w http.ResponseWriter, r *http.Request, u auth.User) 
 		return
 	}
 	name := q.Get("q")
-	rows, err := s.DB.R.QueryContext(r.Context(), `SELECT id,name,COALESCE(device_id,'') FROM growing_units WHERE site_id=? AND name LIKE ? ORDER BY name,id LIMIT ? OFFSET ?`,
+	rows, err := s.DB.R.QueryContext(r.Context(), `SELECT id,name,COALESCE(device_id,'') FROM growing_units WHERE site_id=? AND retired_at IS NULL AND name LIKE ? ORDER BY name,id LIMIT ? OFFSET ?`,
 		s.Cfg.SiteID, "%"+name+"%", limit, offset)
 	if err != nil {
 		s.mapErr(w, r, err)
@@ -402,7 +430,7 @@ func (s *Server) listUnits(w http.ResponseWriter, r *http.Request, u auth.User) 
 		return
 	}
 	var total int
-	_ = s.DB.R.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM growing_units WHERE site_id=? AND name LIKE ?`, s.Cfg.SiteID, "%"+name+"%").Scan(&total)
+	_ = s.DB.R.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM growing_units WHERE site_id=? AND retired_at IS NULL AND name LIKE ?`, s.Cfg.SiteID, "%"+name+"%").Scan(&total)
 	writeJSON(w, 200, map[string]any{"units": out, "total": total, "limit": limit, "offset": offset, "observed_at": storage.Now(), "source": "local"})
 }
 

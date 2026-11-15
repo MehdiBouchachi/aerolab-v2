@@ -1,0 +1,7 @@
+[Unit]
+Description=Reload Mosquitto (AeroLab controller credentials changed)
+After=mosquitto.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl reload mosquitto.service

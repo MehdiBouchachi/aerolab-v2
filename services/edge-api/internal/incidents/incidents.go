@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strings"
 
 	mc "github.com/mehdibouchachi/aerolab-v2/contracts/mqtt"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/auth"
@@ -53,6 +54,16 @@ var catalogue = map[string]Info{
 func Describe(code string) Info {
 	if i, ok := catalogue[code]; ok {
 		return i
+	}
+	if name, ok := strings.CutPrefix(code, "RANGE_HIGH:"); ok {
+		return Info{mc.SevWarning, name + " is above this unit's crop-profile range",
+			"Several consecutive valid readings of " + name + " were above the maximum set in the crop profile assigned to this unit. This is an advisory alert from the Pi; the controller keeps irrigating on its own programme and safety limits.",
+			"Check the reservoir and the sensor. Correct the solution, or the profile if its range is wrong."}
+	}
+	if name, ok := strings.CutPrefix(code, "RANGE_LOW:"); ok {
+		return Info{mc.SevWarning, name + " is below this unit's crop-profile range",
+			"Several consecutive valid readings of " + name + " were below the minimum set in the crop profile assigned to this unit. This is an advisory alert from the Pi; the controller keeps irrigating on its own programme and safety limits.",
+			"Check the reservoir and the sensor. Correct the solution, or the profile if its range is wrong."}
 	}
 	return Info{mc.SevWarning, "Controller reported " + code, "The controller reported a condition this version does not describe.", "Inspect the unit and review its recent events."}
 }
@@ -166,7 +177,7 @@ func Reconcile(ctx context.Context, tx *sql.Tx, siteID, unitID string, faults []
 		}
 		set[f] = true
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT code FROM incidents WHERE unit_id=? AND status IN ('ACTIVE_UNACKNOWLEDGED','ACTIVE_ACKNOWLEDGED') AND code<>?`, unitID, CodeDeviceStale)
+	rows, err := tx.QueryContext(ctx, `SELECT code FROM incidents WHERE unit_id=? AND status IN ('ACTIVE_UNACKNOWLEDGED','ACTIVE_ACKNOWLEDGED') AND code<>? AND code NOT LIKE 'RANGE\_%' ESCAPE '\'`, unitID, CodeDeviceStale)
 	if err != nil {
 		return nil, err
 	}

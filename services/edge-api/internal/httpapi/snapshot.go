@@ -16,7 +16,7 @@ import (
 func (s *Server) Snapshot(ctx context.Context) (sc.State, error) {
 	st := sc.State{ObservedAt: storage.Now(), SiteName: s.Cfg.SiteName, Units: []json.RawMessage{}}
 	st.Connectivity.MQTTBrokerConnected = s.MQTT.Connected()
-	rows, err := s.DB.R.QueryContext(ctx, `SELECT id,name,COALESCE(device_id,'') FROM growing_units WHERE site_id=? ORDER BY id LIMIT 201`, s.Cfg.SiteID)
+	rows, err := s.DB.R.QueryContext(ctx, `SELECT id,name,COALESCE(device_id,'') FROM growing_units WHERE site_id=? AND retired_at IS NULL ORDER BY id LIMIT 201`, s.Cfg.SiteID)
 	if err != nil {
 		return st, err
 	}

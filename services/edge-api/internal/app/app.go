@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/broker"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/crops"
 	"log/slog"
 	"net"
 	"os"
@@ -48,6 +50,8 @@ type App struct {
 	MQTT    *mqtt.Client
 	HTTP    *httpapi.Server
 	Sync    *edgesync.Worker
+	Broker  *broker.Manager
+	Ranges  *crops.Evaluator
 	Pair    *pairing.Service
 
 	ln net.Listener
@@ -109,6 +113,19 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		return nil, err
 	}
 	a.Writer = telemetry.NewWriter(db, a.MQTT, a.Hub, a.Metrics, log, cfg.SiteID, cfg.RecordQueueSize, cfg.CloudSyncEnabled)
+	a.Ranges = crops.NewEvaluator()
+	a.Writer.Ranges = a.Ranges
+	if ts, err := a.Ranges.Load(ctx, db.R, cfg.SiteID); err != nil {
+		return nil, fmt.Errorf("load crop ranges: %w", err)
+	} else if len(ts) > 0 {
+		a.Writer.Do(a.Writer.RangeOp(ts)) // queued; runs once the writer starts
+	}
+	a.Broker = &broker.Manager{PasswdFile: cfg.BrokerPasswdFile, PIDFile: cfg.BrokerPIDFile}
+	if a.Broker.Enabled() { // converge after a crash between the DB commit and the file write
+		if err := a.Broker.Sync(ctx, db.R); err != nil {
+			log.Error("broker credential sync at startup failed; new controllers may not connect", "err", err)
+		}
+	}
 	ingest = telemetry.NewIngest(cfg.SiteID, cfg.AllowSimulatedData, cfg.StaleAfter, a.Reg, a.Writer, a.Cmds, a.Hub, a.Metrics, log)
 	ingest.SyncOutbox = cfg.CloudSyncEnabled
 	a.Ingest = ingest
@@ -117,7 +134,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		a.Sync = edgesync.NewWorker(edgesync.Options{SiteID: cfg.SiteID, URL: cfg.CloudURL, Token: cfg.CloudToken, Interval: cfg.CloudSyncInterval, EdgeVersion: "edge-" + Version, RemotePrograms: cfg.RemotePrograms}, db, a.Cmds, nil, log)
 		cloud = a.Sync
 	}
-	a.HTTP = httpapi.New(httpapi.Deps{Cfg: cfg, DB: db, Auth: a.Auth, Reg: a.Reg, Cmds: a.Cmds, Hub: a.Hub, Metrics: a.Metrics, Writer: a.Writer, MQTT: a.MQTT, Cloud: cloud, Pairing: a.Pair, Static: static.FS, Log: log})
+	a.HTTP = httpapi.New(httpapi.Deps{Cfg: cfg, DB: db, Auth: a.Auth, Reg: a.Reg, Cmds: a.Cmds, Hub: a.Hub, Metrics: a.Metrics, Writer: a.Writer, MQTT: a.MQTT, Cloud: cloud, Pairing: a.Pair, Broker: a.Broker, Ranges: a.Ranges, Static: static.FS, Log: log})
 	if a.Sync != nil {
 		a.Sync.SetStateFunc(a.HTTP.Snapshot)
 	}

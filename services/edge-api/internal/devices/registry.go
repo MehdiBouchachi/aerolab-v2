@@ -107,6 +107,12 @@ func EnsureSite(ctx context.Context, db *storage.Store, id, name string, simulat
 
 // Provision registers a device and its growing unit (Admin, audited).
 func (r *Registry) Provision(ctx context.Context, deviceID, unitID, unitName, hardware, dataSource, actor string) (Device, Unit, error) {
+	return r.ProvisionWithCredential(ctx, deviceID, unitID, unitName, hardware, dataSource, actor, "")
+}
+
+// ProvisionWithCredential is Provision plus the Mosquitto hash of a broker password the edge itself
+// issued (empty: credentials are managed out of band, as for installer-provisioned devices).
+func (r *Registry) ProvisionWithCredential(ctx context.Context, deviceID, unitID, unitName, hardware, dataSource, actor, brokerHash string) (Device, Unit, error) {
 	if !mc.ValidID(deviceID) || !mc.ValidID(unitID) {
 		return Device{}, Unit{}, fmt.Errorf("invalid device or unit id")
 	}
@@ -120,8 +126,12 @@ func (r *Registry) Provision(ctx context.Context, deviceID, unitID, unitName, ha
 	d := Device{ID: deviceID, SiteID: r.siteID, UnitID: unitID, DataSource: dataSource, Hardware: hardware}
 	u := Unit{ID: unitID, SiteID: r.siteID, DeviceID: deviceID, Name: unitName, CreatedAt: now}
 	err := r.db.Tx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO devices(id,site_id,unit_id,hardware_profile,data_source,provisioned_at) VALUES (?,?,?,?,?,?)`,
-			deviceID, r.siteID, unitID, nullStr(hardware), dataSource, now); err != nil {
+		var issued any
+		if brokerHash != "" {
+			issued = now
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO devices(id,site_id,unit_id,hardware_profile,data_source,provisioned_at,broker_password_hash,credentials_issued_at) VALUES (?,?,?,?,?,?,?,?)`,
+			deviceID, r.siteID, unitID, nullStr(hardware), dataSource, now, nullStr(brokerHash), issued); err != nil {
 			return mapUnique(err)
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO growing_units(id,site_id,device_id,name,created_at) VALUES (?,?,?,?,?)`, unitID, r.siteID, deviceID, unitName, now); err != nil {
@@ -137,6 +147,74 @@ func (r *Registry) Provision(ctx context.Context, deviceID, unitID, unitName, ha
 	r.byUnit[unitID] = deviceID
 	r.mu.Unlock()
 	return d, u, nil
+}
+
+// Rename changes a unit's display name (audited).
+func (r *Registry) Rename(ctx context.Context, unitID, name, actor string) error {
+	if len(name) == 0 || len(name) > 80 {
+		return fmt.Errorf("unit name required (max 80)")
+	}
+	return r.db.Tx(ctx, func(tx *sql.Tx) error {
+		var prev string
+		if err := tx.QueryRowContext(ctx, `SELECT name FROM growing_units WHERE id=? AND site_id=?`, unitID, r.siteID).Scan(&prev); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE growing_units SET name=? WHERE id=?`, name, unitID); err != nil {
+			return err
+		}
+		return auth.Audit(ctx, tx, r.siteID, actor, "local", "unit.rename", "unit", unitID, fmt.Sprintf(`{"name":%q}`, prev), fmt.Sprintf(`{"name":%q}`, name))
+	})
+}
+
+// Retire disables a unit's controller: its broker credential is withdrawn (when the edge manages it)
+// and anything it still sends is ignored. History is kept. Not reversible from the API on purpose:
+// re-adding hardware issues a new identity.
+func (r *Registry) Retire(ctx context.Context, unitID, actor string) (deviceID string, err error) {
+	err = r.db.Tx(ctx, func(tx *sql.Tx) error {
+		if err := tx.QueryRowContext(ctx, `SELECT d.id FROM devices d WHERE d.unit_id=? AND d.site_id=? AND d.disabled_at IS NULL`, unitID, r.siteID).Scan(&deviceID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			return err
+		}
+		now := storage.Now()
+		if _, err := tx.ExecContext(ctx, `UPDATE devices SET disabled_at=? WHERE id=?`, now, deviceID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE growing_units SET retired_at=? WHERE id=?`, now, unitID); err != nil {
+			return err
+		}
+		return auth.Audit(ctx, tx, r.siteID, actor, "local", "unit.retire", "unit", unitID, "", fmt.Sprintf(`{"device_id":%q}`, deviceID))
+	})
+	if err != nil {
+		return "", err
+	}
+	r.mu.Lock()
+	if rt := r.byDev[deviceID]; rt != nil {
+		rt.Disabled = true
+	}
+	r.mu.Unlock()
+	return deviceID, nil
+}
+
+// SetCredential replaces the broker hash of an active device (lost setup code, suspected leak).
+func (r *Registry) SetCredential(ctx context.Context, unitID, hash, actor string) (deviceID string, err error) {
+	err = r.db.Tx(ctx, func(tx *sql.Tx) error {
+		if err := tx.QueryRowContext(ctx, `SELECT id FROM devices WHERE unit_id=? AND site_id=? AND disabled_at IS NULL`, unitID, r.siteID).Scan(&deviceID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE devices SET broker_password_hash=?, credentials_issued_at=? WHERE id=?`, hash, storage.Now(), deviceID); err != nil {
+			return err
+		}
+		return auth.Audit(ctx, tx, r.siteID, actor, "local", "device.credential_rotate", "device", deviceID, "", "")
+	})
+	return deviceID, err
 }
 
 func nullStr(s string) any {

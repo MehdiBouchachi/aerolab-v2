@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/crops"
 	"log/slog"
 	"sort"
 	"strings"
@@ -64,6 +65,8 @@ type Op struct {
 }
 
 type Writer struct {
+	// Ranges, when set, turns telemetry outside a unit's crop-profile ranges into advisory incidents.
+	Ranges     *crops.Evaluator
 	db         *storage.Store
 	recs       chan recordJob
 	ops        chan Op
@@ -261,6 +264,15 @@ func (w *Writer) commitBatch(ctx context.Context, batch []recordJob) {
 	for _, j := range faultEvents {
 		w.Do(w.reconstructOp(j.deviceID, j.unitID, j.bootID, j.ev.Code))
 	}
+	if w.Ranges != nil {
+		var ts []crops.Transition
+		for unit, j := range latest {
+			ts = append(ts, w.Ranges.Evaluate(unit, j.tel.Readings)...)
+		}
+		if len(ts) > 0 {
+			w.Do(w.RangeOp(ts))
+		}
+	}
 	for unit, j := range latest {
 		w.hub.Publish("unit.reading", map[string]any{"unit_id": unit, "effective_at_utc": storage.FormatTime(j.effective),
 			"time_quality": j.timeQ, "data_source": j.source, "readings": j.tel.Readings})
@@ -334,6 +346,34 @@ func nullIfEmpty(s string) any {
 }
 
 var _ = strings.TrimSpace
+
+// RangeOp opens or resolves crop-profile range incidents in the writer's single transaction lane.
+func (w *Writer) RangeOp(ts []crops.Transition) Op {
+	return Op{Name: "incidents.range", Fn: func(ctx context.Context, tx *sql.Tx) (func(), error) {
+		now := storage.Now()
+		var changes []incidents.Change
+		for _, t := range ts {
+			c, err := incidents.SetCondition(ctx, tx, w.siteID, t.UnitID, t.Code, t.Active, now)
+			if err != nil {
+				return nil, err
+			}
+			if c == nil {
+				continue
+			}
+			if w.syncOutbox {
+				if err := edgesync.EnqueueIncident(ctx, tx, w.siteID, c.Incident); err != nil {
+					return nil, err
+				}
+			}
+			changes = append(changes, *c)
+		}
+		return func() {
+			for _, c := range changes {
+				w.hub.Publish("incident.updated", c.Incident)
+			}
+		}, nil
+	}}
+}
 
 // reconstructOp pairs a stored FAULT_RAISED with the first later FAULT_CLEARED of the same code in the
 // same boot (they may arrive in either order during a replay) and records an outage-only fault.
