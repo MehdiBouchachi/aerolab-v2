@@ -10,7 +10,7 @@ import { Icon } from '../components/Icon'
 
 export function Incidents() {
   const { session, can } = useApp()
-  const site = session!.site.id
+  const site = session!.site!.id
   const [state, setState] = useState<'active' | 'resolved'>('active')
   const [err, setErr] = useState<ApiError | null>(null)
   const list = useFetch<{ incidents: Incident[] }>(`/api/v1/sites/${site}/incidents?state=${state}&limit=100`, ['incident.updated'])

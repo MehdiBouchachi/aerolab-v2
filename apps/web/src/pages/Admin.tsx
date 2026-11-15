@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
 import { useApp } from '../app/context'
 import { useFetch } from '../app/hooks'
-import type { Role, StorageInfo } from '../api/types'
+import type { LinkInfo, Role, StorageInfo } from '../api/types'
 import { bytes, clock } from '../app/format'
 import { ErrorNote, Loading } from '../components/ui'
 import { Icon } from '../components/Icon'
@@ -14,9 +14,9 @@ interface U { id: string; username: string; role: Role; disabled: boolean }
 
 export function Admin() {
   const { session, can } = useApp()
-  const site = session!.site.id
+  const site = session!.site!.id
   const users = useFetch<{ users: U[] }>('/api/v1/local/users', [], 0)
-  const storage = useFetch<StorageInfo>(`/api/v1/sites/${site}/storage`, [], 15000)
+  const storage = useFetch<StorageInfo>(`/api/v1/sites/${site}/storage`, ['site.cloud_link'], 15000)
   const devs = useFetch<{ devices: { device_id: string; unit_id: string; data_source: string; connection: string }[] }>(`/api/v1/sites/${site}/devices`, ['unit.state'])
   const audit = useFetch<{ events: { id: string; actor_id: string; action: string; target_type: string; occurred_at: string }[] }>(`/api/v1/sites/${site}/audit?limit=20`, [], 20000)
   const [err, setErr] = useState<ApiError | null>(null)
@@ -25,7 +25,7 @@ export function Admin() {
   const [pair, setPair] = useState<{ code: string; expires: string; payload: string; qr: string } | null>(null)
   const [searchParams] = useSearchParams()
   const requested = searchParams.get('view')
-  const view = requested === 'controllers' || requested === 'users' || requested === 'activity' || (requested === 'pairing' && !IS_CLOUD) ? requested : 'storage'
+  const view = requested === 'controllers' || requested === 'users' || requested === 'activity' || ((requested === 'pairing' || requested === 'cloud') && !IS_CLOUD) ? requested : 'storage'
   const [userQuery, setUserQuery] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [busyUser, setBusyUser] = useState<string | null>(null)
@@ -70,6 +70,7 @@ export function Admin() {
         <Link to="?view=storage" aria-current={view === 'storage' ? 'page' : undefined}>Storage</Link>
         <Link to="?view=controllers" aria-current={view === 'controllers' ? 'page' : undefined}>Controllers</Link>
         <Link to="?view=users" aria-current={view === 'users' ? 'page' : undefined}>Users</Link>
+        {!IS_CLOUD && <Link to="?view=cloud" aria-current={view === 'cloud' ? 'page' : undefined}>Cloud connection</Link>}
         {!IS_CLOUD && <Link to="?view=pairing" aria-current={view === 'pairing' ? 'page' : undefined}>Phone pairing</Link>}
         <Link to="?view=activity" aria-current={view === 'activity' ? 'page' : undefined}>Activity</Link>
       </nav>
@@ -131,6 +132,8 @@ export function Admin() {
         </tbody></table>{visibleUsers.length === 0 && <p className="admin-table-empty">{userQuery ? 'No users match your search.' : 'No local accounts.'}</p>}</div>}
       </section>}
 
+      {!IS_CLOUD && view === 'cloud' && <section className="admin-section"><CloudLink /></section>}
+
       {!IS_CLOUD && view === 'pairing' && <section className="admin-section">
         <div className="admin-section-head"><h2>Phone pairing</h2></div>
         <div className="admin-surface admin-pairing">
@@ -147,4 +150,41 @@ export function Admin() {
       </section>}
     </section>
   )
+}
+
+/** Connect this Pi to a cloud with a one-time code from the cloud dashboard (no files to edit). */
+function CloudLink() {
+  const l = useFetch<{ link: LinkInfo; sync: { enabled: boolean; last_sync_at: string | null; reachable?: boolean | null } }>('/api/v1/cloud-link', ['site.cloud_link'], 15000)
+  const [f, setF] = useState({ cloud_url: '', code: '' })
+  const [err, setErr] = useState<ApiError | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const link = l.data?.link
+  const connect = async (e: FormEvent) => {
+    e.preventDefault(); setBusy(true); setErr(null); setNote('')
+    try { const r = await api<{ note: string }>('POST', '/api/v1/cloud-link', f); setNote(r.note); setF({ cloud_url: '', code: '' }); l.reload() } catch (x) { setErr(x as ApiError) } finally { setBusy(false) }
+  }
+  const disconnect = async () => {
+    if (!window.confirm('Disconnect this Pi from the cloud? It keeps working locally; the cloud stops receiving updates.')) return
+    setErr(null)
+    try { await api('DELETE', '/api/v1/cloud-link'); l.reload() } catch (x) { setErr(x as ApiError) }
+  }
+  return (<>
+    <h2>Cloud connection</h2>
+    <p className="muted small">Optional. Connecting lets you see this Pi next to your other Pis from anywhere. The site keeps irrigating and recording without it.</p>
+    <ErrorNote error={err ?? l.error} />
+    {note && <p className="note ok">{note}</p>}
+    {link?.linked ? (
+      <div className="panel">
+        <p>Connected to <b>{link.url}</b>{link.organization_name && <> · organisation <b>{link.organization_name}</b></>}.</p>
+        <p className="muted small">Last sync: {l.data?.sync.last_sync_at ? clock(l.data.sync.last_sync_at) : 'not yet'}{l.data?.sync.reachable === false && ' · cloud currently unreachable (data is queued)'}</p>
+        {link.configured_by_installer ? <p className="muted small">Set by the installer; change it in the Pi's configuration.</p> : <button onClick={() => void disconnect()}>Disconnect from the cloud</button>}
+      </div>
+    ) : (
+      <form className="inline-form" onSubmit={connect} aria-label="Connect to cloud">
+        <label>Cloud address<input type="url" placeholder="https://…" value={f.cloud_url} onChange={e => setF({ ...f, cloud_url: e.target.value })} required /></label>
+        <label>Connection code<input value={f.code} onChange={e => setF({ ...f, code: e.target.value })} autoComplete="off" required /></label>
+        <button className="primary" disabled={busy}>{busy ? 'Connecting…' : 'Connect'}</button>
+      </form>)}
+  </>)
 }

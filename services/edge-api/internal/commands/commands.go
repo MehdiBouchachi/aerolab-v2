@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	mc "github.com/mehdibouchachi/aerolab-v2/contracts/mqtt"
@@ -76,10 +77,13 @@ type Manager struct {
 
 	mu      sync.Mutex
 	pending map[string]struct{} // command ids awaiting a result (for state reconciliation)
+	outbox  atomic.Bool
 }
 
 func New(db *storage.Store, reg *devices.Registry, pub Publisher, hub *sse.Hub, opt Options, log *slog.Logger) *Manager {
-	return &Manager{db: db, reg: reg, pub: pub, hub: hub, opt: opt, log: log, pending: map[string]struct{}{}}
+	m := &Manager{db: db, reg: reg, pub: pub, hub: hub, opt: opt, log: log, pending: map[string]struct{}{}}
+	m.outbox.Store(opt.SyncOutbox)
+	return m
 }
 
 type Command struct {
@@ -350,7 +354,7 @@ func (m *Manager) finish(ctx context.Context, id string, st Status, reason strin
 	changed := false
 	err := m.db.Tx(ctx, func(tx *sql.Tx) error {
 		var e error
-		out, changed, e = finishTx(ctx, tx, m.opt, id, st, reason, result)
+		out, changed, e = finishTx(ctx, tx, m.optNow(), id, st, reason, result)
 		return e
 	})
 	if err != nil {
@@ -373,6 +377,11 @@ func (m *Manager) afterChange(c Command, changed bool) {
 	}
 	m.hub.Publish("program.updated", c)
 }
+
+// SetSyncOutbox turns cloud outbox writes on or off at runtime.
+func (m *Manager) SetSyncOutbox(on bool) { m.outbox.Store(on) }
+
+func (m *Manager) optNow() Options { o := m.opt; o.SyncOutbox = m.outbox.Load(); return o }
 
 func finishTx(ctx context.Context, tx *sql.Tx, opt Options, id string, st Status, reason string, result []byte) (Command, bool, error) {
 	cur, err := scanCmd(tx.QueryRowContext(ctx, `SELECT `+cmdCols+` FROM commands WHERE id=?`, id))
@@ -485,7 +494,7 @@ func (m *Manager) ApplyResult(ctx context.Context, tx *sql.Tx, res mc.CommandRes
 		}
 	}
 	raw, _ := json.Marshal(res)
-	out, changed, err := finishTx(ctx, tx, m.opt, res.CommandID, st, reason, raw)
+	out, changed, err := finishTx(ctx, tx, m.optNow(), res.CommandID, st, reason, raw)
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +523,7 @@ func (m *Manager) ReconcileFromState(ctx context.Context, tx *sql.Tx, deviceID s
 	if cur.NewVersion == nil || *cur.NewVersion != *st.ProgramVersionApplied {
 		return nil, nil
 	}
-	out, changed, err := finishTx(ctx, tx, m.opt, cur.ID, Applied, "RECONCILED_FROM_STATE", nil)
+	out, changed, err := finishTx(ctx, tx, m.optNow(), cur.ID, Applied, "RECONCILED_FROM_STATE", nil)
 	if err != nil {
 		return nil, err
 	}

@@ -9,6 +9,7 @@
 #include "message_buffer.h"
 #include "protocol.h"
 #include "board_profile.h"
+#include "setup_code.h"
 
 static int g_fail = 0, g_run = 0;
 #define CHECK(c) do { g_run++; if (!(c)) { g_fail++; printf("  FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); } } while (0)
@@ -311,6 +312,90 @@ TEST(encoders_fit_buffers_and_never_write_zero_for_missing) {
     }
 }
 
+
+static int read_text(const char *rel, char *buf, size_t cap) {
+    char path[512]; snprintf(path, sizeof path, "%s/%s", g_fix, rel);
+    FILE *f = fopen(path, "rb"); if (!f) return -1;
+    size_t n = fread(buf, 1, cap - 1, f); fclose(f); buf[n] = 0; return (int)n;
+}
+
+/* b64url of an arbitrary JSON string, so hostile bundles can be built in the test */
+static void b64url(const char *in, char *out) {
+    static const char *A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    size_t n = strlen(in), o = 0; unsigned acc = 0; int bits = 0;
+    for (size_t i = 0; i < n; i++) { acc = (acc << 8) | (unsigned char)in[i]; bits += 8; while (bits >= 6) { bits -= 6; out[o++] = A[(acc >> bits) & 63]; } }
+    if (bits > 0) out[o++] = A[(acc << (6 - bits)) & 63];
+    out[o] = 0;
+}
+
+TEST(setup_code_from_the_pi_is_decoded_exactly) {
+    char code[1100]; int n = read_text("setup/valid.code", code, sizeof code);
+    CHECK(n > 0);
+    setup_t s; memset(&s, 0x5a, sizeof s);
+    CHECK(setup_decode_code(code, (size_t)n, &s) == SETUP_OK); /* trailing newline tolerated */
+    CHECK(strcmp(s.site_id, "site-fixture-01") == 0); CHECK(strcmp(s.device_id, "esp32-fixture-01") == 0);
+    CHECK(strcmp(s.unit_id, "unit-fixture-01") == 0); CHECK(strcmp(s.mqtt_uri, "mqtt://aerolab.local:1883") == 0);
+    CHECK(strcmp(s.mqtt_user, "esp32-fixture-01") == 0); CHECK(strcmp(s.mqtt_pass, "fixture-password-not-a-secret-0001") == 0);
+    /* every truncation of a valid code is refused, never half-applied */
+    setup_t t; memset(&t, 0, sizeof t); int bad = 0;
+    for (int k = 1; k < n - 1; k++) if (setup_decode_code(code, (size_t)k, &t) == SETUP_OK) bad++;
+    CHECK(bad == 0); CHECK(t.device_id[0] == 0);
+}
+
+TEST(setup_code_rejects_hostile_or_wrong_bundles) {
+    const char *cases[] = {
+        "{\"v\":2,\"site_id\":\"site-a-01\",\"device_id\":\"esp32-a\",\"unit_id\":\"unit-a\",\"mqtt_uri\":\"mqtt://h\",\"mqtt_user\":\"esp32-a\",\"mqtt_pass\":\"0123456789abcdef\"}",
+        "{\"v\":1,\"site_id\":\"site-a-01\",\"device_id\":\"esp32-a\",\"unit_id\":\"unit-a\",\"mqtt_uri\":\"mqtt://h\",\"mqtt_user\":\"someone-else\",\"mqtt_pass\":\"0123456789abcdef\"}",
+        "{\"v\":1,\"site_id\":\"site-a-01\",\"device_id\":\"ESP32-A\",\"unit_id\":\"unit-a\",\"mqtt_uri\":\"mqtt://h\",\"mqtt_user\":\"ESP32-A\",\"mqtt_pass\":\"0123456789abcdef\"}",
+        "{\"v\":1,\"site_id\":\"site-a-01\",\"device_id\":\"esp32-a/#\",\"unit_id\":\"unit-a\",\"mqtt_uri\":\"mqtt://h\",\"mqtt_user\":\"esp32-a/#\",\"mqtt_pass\":\"0123456789abcdef\"}",
+        "{\"v\":1,\"site_id\":\"site-a-01\",\"device_id\":\"esp32-a\",\"unit_id\":\"unit-a\",\"mqtt_uri\":\"http://h\",\"mqtt_user\":\"esp32-a\",\"mqtt_pass\":\"0123456789abcdef\"}",
+        "{\"v\":1,\"site_id\":\"site-a-01\",\"device_id\":\"esp32-a\",\"unit_id\":\"unit-a\",\"mqtt_uri\":\"mqtt://\",\"mqtt_user\":\"esp32-a\",\"mqtt_pass\":\"0123456789abcdef\"}",
+        "{\"v\":1,\"site_id\":\"site-a-01\",\"device_id\":\"esp32-a\",\"unit_id\":\"unit-a\",\"mqtt_uri\":\"mqtt://h\",\"mqtt_user\":\"esp32-a\",\"mqtt_pass\":\"short\"}",
+        "{\"v\":1,\"site_id\":\"site-a-01\",\"device_id\":\"esp32-a\",\"unit_id\":\"unit-a\",\"mqtt_uri\":\"mqtt://h\",\"mqtt_user\":\"esp32-a\"}",
+        "{\"v\":1,\"site_id\":\"site-a-01\",\"device_id\":\"esp32-a\",\"unit_id\":\"unit-a\",\"mqtt_uri\":\"mqtt://h x\",\"mqtt_user\":\"esp32-a\",\"mqtt_pass\":\"0123456789abcdef\"}",
+        "[1,2,3]", "{\"v\":1", "",
+    };
+    const setup_err_t want[] = {SETUP_BAD_VERSION, SETUP_BAD_FIELD, SETUP_BAD_FIELD, SETUP_BAD_FIELD, SETUP_BAD_FIELD, SETUP_BAD_FIELD, SETUP_BAD_FIELD,
+                                SETUP_BAD_FIELD, SETUP_BAD_FIELD, SETUP_BAD_JSON, SETUP_BAD_JSON, SETUP_BAD_ENCODING};
+    for (size_t i = 0; i < sizeof cases / sizeof *cases; i++) {
+        char enc[1200]; b64url(cases[i], enc); setup_t s;
+        setup_err_t e = setup_decode_code(enc, strlen(enc), &s);
+        if (e != want[i]) printf("  case %zu: got %d want %d\n", i, e, want[i]);
+        CHECK(e == want[i]);
+        CHECK(setup_err_text(e)[0] != 0);
+    }
+    setup_t s;
+    CHECK(setup_decode_code("not base64 at all!", 18, &s) == SETUP_BAD_ENCODING);
+    char big[2000]; memset(big, 'A', sizeof big - 1); big[sizeof big - 1] = 0;
+    CHECK(setup_decode_code(big, strlen(big), &s) == SETUP_BAD_ENCODING); /* oversized input refused, no overflow */
+}
+
+TEST(setup_form_from_the_controller_page) {
+    char code[1100]; int n = read_text("setup/valid.code", code, sizeof code);
+    while (n > 0 && (code[n - 1] == '\n' || code[n - 1] == '\r')) code[--n] = 0;
+    char body[1600]; setup_t s;
+    snprintf(body, sizeof body, "ssid=Farm+Wi-Fi%%21&pass=correct%%20horse&code=%s", code);
+    CHECK(setup_parse_form(body, strlen(body), &s) == SETUP_OK);
+    CHECK(strcmp(s.wifi_ssid, "Farm Wi-Fi!") == 0); CHECK(strcmp(s.wifi_pass, "correct horse") == 0);
+    CHECK(strcmp(s.device_id, "esp32-fixture-01") == 0);
+    snprintf(body, sizeof body, "ssid=Open&pass=&code=%s", code);
+    CHECK(setup_parse_form(body, strlen(body), &s) == SETUP_OK); /* open network: empty password */
+    snprintf(body, sizeof body, "ssid=Farm&pass=short&code=%s", code);
+    CHECK(setup_parse_form(body, strlen(body), &s) == SETUP_BAD_WIFI);
+    snprintf(body, sizeof body, "ssid=&pass=password1&code=%s", code);
+    CHECK(setup_parse_form(body, strlen(body), &s) == SETUP_BAD_WIFI);
+    snprintf(body, sizeof body, "ssid=123456789012345678901234567890123&pass=password1&code=%s", code);
+    CHECK(setup_parse_form(body, strlen(body), &s) == SETUP_BAD_WIFI); /* 33-byte SSID */
+    snprintf(body, sizeof body, "ssid=Farm&pass=password1%%&code=%s", code);
+    CHECK(setup_parse_form(body, strlen(body), &s) == SETUP_BAD_WIFI); /* dangling escape */
+    snprintf(body, sizeof body, "ssid=Fa%%00rm&pass=password1&code=%s", code);
+    CHECK(setup_parse_form(body, strlen(body), &s) == SETUP_BAD_WIFI); /* embedded NUL */
+    CHECK(setup_parse_form("ssid=Farm&pass=password1", 24, &s) == SETUP_BAD_ENCODING);
+    CHECK(setup_parse_form("garbage", 7, &s) == SETUP_BAD_FORM);
+    snprintf(body, sizeof body, "ssid=A&ssid=B&pass=password1&code=%s", code);
+    CHECK(setup_parse_form(body, strlen(body), &s) == SETUP_BAD_WIFI); /* duplicated field */
+}
+
 int main(int argc, char **argv) {
     g_fix = argc > 1 ? argv[1] : NULL;
     if (argc > 2) setenv("FW_OUT", argv[2], 1);
@@ -323,6 +408,7 @@ int main(int argc, char **argv) {
     RUN(config_store_roundtrip_and_power_cut_keeps_previous_programme); RUN(config_store_discards_corrupt_or_unsafe_records_instead_of_running_them);
     RUN(command_applies_dedups_conflicts_and_rejects_stale_sessions); RUN(persist_failure_changes_nothing_and_reboot_still_knows_the_last_command); RUN(query_state_and_commands_for_other_devices);
     RUN(encoders_fit_buffers_and_never_write_zero_for_missing);
+    RUN(setup_code_from_the_pi_is_decoded_exactly); RUN(setup_code_rejects_hostile_or_wrong_bundles); RUN(setup_form_from_the_controller_page);
     printf("\n%d checks, %d failed\n", g_run, g_fail);
     return g_fail ? 1 : 0;
 }

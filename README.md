@@ -85,6 +85,12 @@ apps/web (dashboard; local + cloud builds)  apps/mobile (Expo)  services/cloud-a
 ▫ packages (shared TS packages: not extracted yet; web and mobile each carry small copies of the API types)  ▫ infrastructure/cloud (no Compose/Docker yet)
 ```
 
+## Fleet management (self-service)
+Growers add units from the Pi dashboard (the Pi issues the controller's credentials and a one-time
+setup code), give each unit its own crop profile (their own numbers; none ship), connect a Pi to the
+cloud with a one-time code, and see every farm in one cloud view, for personal, business and public
+deployments alike. See [`docs/architecture/fleet-management.md`](docs/architecture/fleet-management.md).
+
 ## Safety and honesty rules baked into the code
 
 * Irrigation authority and interlocks live on the controller; the Pi cannot start a pump, and manual pump

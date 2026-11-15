@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useFetch } from '../app/hooks'
-import type { Command, History, Incident, Program, Unit } from '../api/types'
+import type { Command, CropProfile, History, Incident, Program, Unit } from '../api/types'
 import { ago, clock, label, showReading, unitStatus } from '../app/format'
 import { Badge, Empty, ErrorNote, Loading, Sim } from '../components/ui'
 import { HistoryCompare } from '../components/HistoryCompare'
 import { ProgramEditor } from './ProgramEditor'
 import { useApp } from '../app/context'
-import { P } from '../api/paths'
+import { HOME, IS_CLOUD, P } from '../api/paths'
+
+const UnitSettings = lazy(() => import('./UnitSettings').then(m => ({ default: m.UnitSettings })))
 
 const RANGES = [['1h', 3600e3], ['6h', 6 * 3600e3], ['24h', 24 * 3600e3], ['7d', 7 * 86400e3]] as const
 const READING_ORDER = ['water_temp_c', 'ph', 'ec_ms_cm', 'reservoir_level_ok', 'air_temp_c', 'relative_humidity_pct', 'light_lux']
@@ -15,10 +17,11 @@ const READING_ORDER = ['water_temp_c', 'ph', 'ec_ms_cm', 'reservoir_level_ok', '
 export function UnitPage() {
   const { unitId = '' } = useParams()
   const [searchParams] = useSearchParams()
-  const tab = searchParams.get('tab') === 'history' ? 'history' : searchParams.get('tab') === 'programme' ? 'programme' : 'overview'
+  const q = searchParams.get('tab')
+  const tab = q === 'history' ? 'history' : q === 'programme' ? 'programme' : q === 'settings' && !IS_CLOUD ? 'settings' : 'overview'
   useEffect(() => { window.scrollTo(0, 0) }, [tab])
   const { session } = useApp()
-  const site = session!.site.id
+  const site = session!.site!.id
   const [range, setRange] = useState<(typeof RANGES)[number][0]>('1h')
   const u = useFetch<{ unit: Unit; pending_command: Command | null }>(P.unit(site, unitId), ['unit.state', 'unit.reading', 'program.updated', 'incident.updated'])
   const win = RANGES.find(r => r[0] === range)![1]
@@ -28,16 +31,22 @@ export function UnitPage() {
   const hist = useFetch<History>(`${P.history(site, unitId)}?from=${encodeURIComponent(new Date(now - win).toISOString())}&to=${encodeURIComponent(new Date(now).toISOString())}`, [], 0)
   const prog = useFetch<{ applied: { version: number; program: Program; applied_at: string } | null; controller_reported_version: number | null }>(P.applied(site, unitId), ['program.updated'])
   const inc = useFetch<{ incidents: Incident[] }>(`/api/v1/sites/${site}/incidents?unit_id=${unitId}&state=active`, ['incident.updated'])
+  // crop ranges live on the Pi (offline-first); the cloud copy shows only which crop is assigned
+  const profileId = u.data?.unit.crop?.profile_id
+  const crop = useFetch<CropProfile>(!IS_CLOUD && profileId ? `/api/v1/crop-profiles/${profileId}` : null, ['crop_profile.updated'], 0)
+  const ranges = crop.data && Object.keys(crop.data.thresholds).length ? crop.data.thresholds : null
+  const nav = useNavigate()
 
   if (u.loading) return <Loading what="unit" />
-  if (!u.data) return <><ErrorNote error={u.error} retry={u.reload} /><Link to="/">← Overview</Link></>
+  if (!u.data) return <><ErrorNote error={u.error} retry={u.reload} /><Link to={HOME}>← Overview</Link></>
   const unit = u.data.unit; const st = unitStatus(unit); const r = unit.latest_readings
 
   return (
     <div className="unit-page">
-      <div className="unit-page-heading"><Link className="back-link" to="/">← Overview</Link><div className="unit-page-title"><div><h1>{unit.name.replace(/\s*\(SIMULATED\)$/i, '')}</h1>{unit.is_simulated && <Sim />}</div><Badge tone={st.tone}>{st.text}</Badge></div></div>
+      <div className="unit-page-heading"><Link className="back-link" to={HOME}>← Overview</Link><div className="unit-page-title"><div><h1>{unit.name.replace(/\s*\(SIMULATED\)$/i, '')}</h1>{unit.is_simulated && <Sim />}</div><Badge tone={st.tone}>{st.text}</Badge></div>
+        <p className="muted unit-crop">{unit.crop ? <>Growing <b>{unit.crop.crop}</b>{unit.crop.variety && ` (${unit.crop.variety})`} · profile “{unit.crop.profile_name}”</> : 'No crop profile assigned: no crop-specific alerts.'}</p></div>
       <ErrorNote error={u.error} retry={u.reload} />
-      <nav className="unit-tabs" aria-label="Unit sections"><Link to="?tab=overview" aria-current={tab === 'overview' ? 'page' : undefined}>Overview</Link><Link to="?tab=history" aria-current={tab === 'history' ? 'page' : undefined}>History</Link><Link to="?tab=programme" aria-current={tab === 'programme' ? 'page' : undefined}>Programme</Link></nav>
+      <nav className="unit-tabs" aria-label="Unit sections"><Link to="?tab=overview" aria-current={tab === 'overview' ? 'page' : undefined}>Overview</Link><Link to="?tab=history" aria-current={tab === 'history' ? 'page' : undefined}>History</Link><Link to="?tab=programme" aria-current={tab === 'programme' ? 'page' : undefined}>Programme</Link>{!IS_CLOUD && <Link to="?tab=settings" aria-current={tab === 'settings' ? 'page' : undefined}>Settings</Link>}</nav>
       {tab === 'overview' && <>
       <section className="panel unit-status" aria-label="Controller status">
         <h2>Controller status</h2>
@@ -59,7 +68,13 @@ export function UnitPage() {
       {!r ? <Empty>No readings have been stored for this unit yet.</Empty> : (
         <>
           <p className="muted small reading-time">{clock(r.effective_at_utc)} · {r.time_quality === 'DEVICE_CLOCK' ? 'Controller clock' : r.time_quality === 'ESTIMATED_FROM_UPTIME' ? 'Time estimated from controller uptime' : 'Time recorded when the Pi received it'}</p>
-          <div className="unit-reading-grid">{Object.entries(r.readings).sort(([a], [b]) => (READING_ORDER.indexOf(a) < 0 ? 99 : READING_ORDER.indexOf(a)) - (READING_ORDER.indexOf(b) < 0 ? 99 : READING_ORDER.indexOf(b))).map(([k, v]) => <div className="unit-reading" key={k}><span>{label(k)}</span><strong className={v.quality === 'valid' ? '' : 'dim'}>{showReading(v)}</strong>{v.quality !== 'valid' && <small>{v.quality}</small>}</div>)}</div>
+          <div className="unit-reading-grid">{Object.entries(r.readings).sort(([a], [b]) => (READING_ORDER.indexOf(a) < 0 ? 99 : READING_ORDER.indexOf(a)) - (READING_ORDER.indexOf(b) < 0 ? 99 : READING_ORDER.indexOf(b))).map(([k, v]) => {
+            const rg = ranges?.[k]
+            const out = !!rg && v.quality === 'valid' && typeof v.value === 'number' && ((rg.min !== undefined && v.value < rg.min) || (rg.max !== undefined && v.value > rg.max))
+            return <div className={`unit-reading${out ? ' out-of-range' : ''}`} key={k}><span>{label(k)}</span><strong className={v.quality === 'valid' ? '' : 'dim'}>{showReading(v)}</strong>
+              {v.quality !== 'valid' && <small>{v.quality}</small>}
+              {rg && <small className="crop-range">{out && <b>outside crop range · </b>}{rg.min !== undefined && rg.max !== undefined ? `range ${rg.min}–${rg.max}` : rg.max !== undefined ? `max ${rg.max}` : `min ${rg.min}`}</small>}</div>
+          })}</div>
         </>)}
       </>}
 
@@ -82,6 +97,8 @@ export function UnitPage() {
           : <p className="programme-applied muted">No programme confirmed through this Pi{prog.data?.controller_reported_version ? ` · controller reports version ${prog.data.controller_reported_version}` : ''}.</p>}
         <ProgramEditor unit={unit} pending={u.data.pending_command} onChanged={() => { u.reload(); prog.reload() }} />
       </section>}
+
+      {tab === 'settings' && <Suspense fallback={<Loading what="settings" />}><UnitSettings unit={unit} onChanged={u.reload} onGone={() => nav(HOME)} /></Suspense>}
     </div>
   )
 }

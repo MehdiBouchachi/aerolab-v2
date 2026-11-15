@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	mc "github.com/mehdibouchachi/aerolab-v2/contracts/mqtt"
@@ -29,7 +30,7 @@ type Ingest struct {
 	hub        *sse.Hub
 	m          *diagnostics.Metrics
 	log        *slog.Logger
-	SyncOutbox bool // enqueue incident changes for the cloud (set when cloud sync is enabled)
+	syncOutbox atomic.Bool // enqueue incident changes for the cloud (on while the Pi is connected)
 }
 
 func NewIngest(siteID string, allowSim bool, staleAfter time.Duration, reg *devices.Registry, w *Writer, cmds *commands.Manager, hub *sse.Hub, m *diagnostics.Metrics, log *slog.Logger) *Ingest {
@@ -312,8 +313,11 @@ func (i *Ingest) Watchdog(ctx context.Context) {
 	}
 }
 
+// SetSyncOutbox turns cloud outbox writes on or off.
+func (i *Ingest) SetSyncOutbox(on bool) { i.syncOutbox.Store(on) }
+
 func (i *Ingest) enqueue(ctx context.Context, tx *sql.Tx, changes []incidents.Change) error {
-	if !i.SyncOutbox {
+	if !i.syncOutbox.Load() {
 		return nil
 	}
 	for _, c := range changes {

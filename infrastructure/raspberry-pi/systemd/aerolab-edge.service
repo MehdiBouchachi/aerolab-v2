@@ -20,7 +20,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/aerolab
+ReadWritePaths=/var/lib/aerolab /var/lib/aerolab-broker
 StateDirectory=aerolab
 StateDirectoryMode=0750
 

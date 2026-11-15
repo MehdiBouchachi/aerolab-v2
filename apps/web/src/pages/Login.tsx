@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { useApp } from '../app/context'
 import { ApiError } from '../api/client'
+import { IS_CLOUD } from '../api/paths'
+import { Signup } from './Signup'
 import { useTheme } from '../app/theme'
 
 export function Login() {
@@ -8,6 +10,8 @@ export function Login() {
   const { signIn } = useApp()
   const [u, setU] = useState(''); const [p, setP] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
   const [touched, setTouched] = useState({ u: false, p: false })
+  const [signup, setSignup] = useState(false)
+  if (signup) return <Signup back={() => setSignup(false)} />
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setTouched({ u: true, p: true })
     if (!u || !p) return
@@ -22,9 +26,9 @@ export function Login() {
       <button className="theme-toggle login-theme" type="button" onClick={toggle} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>{theme === 'dark' ? '☀ Light' : '☾ Dark'}</button>
       <form onSubmit={submit} noValidate aria-labelledby="t">
         <h1 id="t">AeroLab</h1>
-        <p className="muted">Sign in to this site. This works without internet.</p>
-        <label>Username<input value={u} onChange={e => setU(e.target.value)} onBlur={() => setTouched(t => ({ ...t, u: true }))} autoComplete="username" autoFocus aria-invalid={touched.u && !u} /></label>
-        {touched.u && !u && <span className="field-error">Enter your username.</span>}
+        <p className="muted">{IS_CLOUD ? <>Sign in to see all your farms. New here? <button type="button" className="link" onClick={() => setSignup(true)}>Create an account</button></> : 'Sign in to this site. This works without internet.'}</p>
+        <label>{IS_CLOUD ? 'Email' : 'Username'}<input value={u} onChange={e => setU(e.target.value)} onBlur={() => setTouched(t => ({ ...t, u: true }))} autoComplete="username" autoFocus aria-invalid={touched.u && !u} /></label>
+        {touched.u && !u && <span className="field-error">{IS_CLOUD ? 'Enter your email address.' : 'Enter your username.'}</span>}
         <label>Password<input type="password" value={p} onChange={e => setP(e.target.value)} onBlur={() => setTouched(t => ({ ...t, p: true }))} autoComplete="current-password" aria-invalid={touched.p && !p} /></label>
         {touched.p && !p && <span className="field-error">Enter your password.</span>}
         {err && <div className="note error" role="alert">{err}</div>}

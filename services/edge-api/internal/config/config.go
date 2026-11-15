@@ -43,7 +43,11 @@ type Config struct {
 	RecordQueueSize int
 
 	// Cloud sync is OFF by default; the outbox is only written when linked.
-	CloudSyncEnabled   bool
+	CloudSyncEnabled bool
+	// Self-service units: the edge maintains controller lines in the broker's password file.
+	BrokerPasswdFile   string // empty: units are added by the installer only
+	BrokerPIDFile      string // optional: SIGHUP this pid after a change (else a systemd path unit reloads)
+	BrokerPublicURL    string // what new controllers dial, e.g. mqtt://aerolab.local:1883 (default: the host the UI was opened on)
 	CloudURL           string // https://... (plain http only for loopback or explicit insecure flag)
 	CloudToken         string // per-site edge credential; supply via secrets, never Git
 	CloudAllowInsecure bool   // lab only
@@ -115,6 +119,7 @@ func Load() (*Config, error) {
 		BootstrapAdminUser: env("AEROLAB_BOOTSTRAP_ADMIN_USER", ""), BootstrapAdminPassword: env("AEROLAB_BOOTSTRAP_ADMIN_PASSWORD", ""),
 		ProvisionFile: env("AEROLAB_PROVISION_FILE", ""), LogLevel: env("AEROLAB_LOG_LEVEL", "info"),
 	}
+	c.BrokerPasswdFile, c.BrokerPIDFile, c.BrokerPublicURL = env("AEROLAB_BROKER_PASSWD_FILE", ""), env("AEROLAB_BROKER_PID_FILE", ""), env("AEROLAB_BROKER_PUBLIC_URL", "")
 	c.CloudURL, c.CloudToken = env("AEROLAB_CLOUD_URL", ""), env("AEROLAB_CLOUD_TOKEN", "")
 	c.CloudAllowInsecure = envBool("AEROLAB_CLOUD_ALLOW_INSECURE", false)
 	c.RemotePrograms = envBool("AEROLAB_REMOTE_PROGRAMS", false)

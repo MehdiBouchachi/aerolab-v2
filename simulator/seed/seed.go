@@ -112,6 +112,7 @@ allow_anonymous false
 password_file %s
 acl_file %s
 persistence false
+pid_file %s
 max_packet_size %d
 max_connections 128
 max_queued_messages 200
@@ -121,7 +122,7 @@ connection_messages false
 log_dest stdout
 log_type error
 log_type warning
-`, port, host, filepath.Join(dir, "mosquitto", "passwd"), filepath.Join(dir, "mosquitto", "acl"), 16*1024)
+`, port, host, filepath.Join(dir, "mosquitto", "passwd"), filepath.Join(dir, "mosquitto", "acl"), filepath.Join(dir, "mosquitto", "mosquitto.pid"), 16*1024)
 }
 
 // Provision writes the full dev environment and returns what it created.
@@ -183,8 +184,9 @@ func Provision(o Options) (*Result, error) {
 	if err := write(res.CredsFile, string(creds)+"\n", 0o600); err != nil {
 		return nil, err
 	}
-	env := fmt.Sprintf("# GENERATED dev secrets - never commit.\nAEROLAB_SITE_ID=%s\nAEROLAB_SITE_NAME=AeroLab-DEV-SIMULATED\nAEROLAB_MQTT_URL=%s\nAEROLAB_MQTT_USER=%s\nAEROLAB_MQTT_PASSWORD=%s\nAEROLAB_ALLOW_SIMULATED_DATA=true\nAEROLAB_DB_PATH=%s\nAEROLAB_BOOTSTRAP_ADMIN_USER=%s\nAEROLAB_BOOTSTRAP_ADMIN_PASSWORD=%s\nAEROLAB_PROVISION_FILE=%s\n",
-		o.SiteID, res.BrokerURL, EdgeMQTTUser, res.EdgePassword, filepath.Join(abs, "aerolab.db"), res.AdminUser, res.AdminPassword, res.CredsFile)
+	env := fmt.Sprintf("# GENERATED dev secrets - never commit.\nAEROLAB_SITE_ID=%s\nAEROLAB_SITE_NAME=AeroLab-DEV-SIMULATED\nAEROLAB_MQTT_URL=%s\nAEROLAB_MQTT_USER=%s\nAEROLAB_MQTT_PASSWORD=%s\nAEROLAB_ALLOW_SIMULATED_DATA=true\nAEROLAB_DB_PATH=%s\nAEROLAB_BOOTSTRAP_ADMIN_USER=%s\nAEROLAB_BOOTSTRAP_ADMIN_PASSWORD=%s\nAEROLAB_PROVISION_FILE=%s\nAEROLAB_BROKER_PASSWD_FILE=%s\nAEROLAB_BROKER_PID_FILE=%s\n",
+		o.SiteID, res.BrokerURL, EdgeMQTTUser, res.EdgePassword, filepath.Join(abs, "aerolab.db"), res.AdminUser, res.AdminPassword, res.CredsFile,
+		filepath.Join(mdir, "passwd"), filepath.Join(mdir, "mosquitto.pid"))
 	res.EdgeEnvFile = filepath.Join(abs, "edge.env")
 	if err := write(res.EdgeEnvFile, env, 0o600); err != nil {
 		return nil, err

@@ -13,9 +13,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/crops"
 	"log/slog"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	mc "github.com/mehdibouchachi/aerolab-v2/contracts/mqtt"
@@ -64,6 +66,8 @@ type Op struct {
 }
 
 type Writer struct {
+	// Ranges, when set, turns telemetry outside a unit's crop-profile ranges into advisory incidents.
+	Ranges     *crops.Evaluator
 	db         *storage.Store
 	recs       chan recordJob
 	ops        chan Op
@@ -72,16 +76,21 @@ type Writer struct {
 	m          *diagnostics.Metrics
 	log        *slog.Logger
 	siteID     string
-	syncOutbox bool
+	syncOutbox atomic.Bool // enqueue for the cloud; flipped at runtime when the Pi is connected
 }
 
 func NewWriter(db *storage.Store, pub Publisher, hub *sse.Hub, m *diagnostics.Metrics, log *slog.Logger, siteID string, queue int, syncOutbox bool) *Writer {
-	return &Writer{db: db, recs: make(chan recordJob, queue), ops: make(chan Op, 512), pub: pub, hub: hub, m: m, log: log, siteID: siteID, syncOutbox: syncOutbox}
+	w := &Writer{db: db, recs: make(chan recordJob, queue), ops: make(chan Op, 512), pub: pub, hub: hub, m: m, log: log, siteID: siteID}
+	w.syncOutbox.Store(syncOutbox)
+	return w
 }
 
 // Enqueue never blocks the MQTT dispatcher. A full queue drops the record:
 // no receipt is issued, so the device keeps it and re-sends (bounded memory
 // on the Pi, durability on the device).
+// SetSyncOutbox turns cloud outbox writes on or off (Pi connected/disconnected at runtime).
+func (w *Writer) SetSyncOutbox(on bool) { w.syncOutbox.Store(on) }
+
 func (w *Writer) enqueue(j recordJob) bool {
 	select {
 	case w.recs <- j:
@@ -228,7 +237,7 @@ func (w *Writer) commitBatch(ctx context.Context, batch []recordJob) {
 				dup++ // already durable from an earlier delivery: still safe to ack
 			} else {
 				persisted++
-				if w.syncOutbox {
+				if w.syncOutbox.Load() {
 					if err := w.outbox(ctx, tx, j, eventID); err != nil {
 						return err
 					}
@@ -260,6 +269,15 @@ func (w *Writer) commitBatch(ctx context.Context, batch []recordJob) {
 
 	for _, j := range faultEvents {
 		w.Do(w.reconstructOp(j.deviceID, j.unitID, j.bootID, j.ev.Code))
+	}
+	if w.Ranges != nil {
+		var ts []crops.Transition
+		for unit, j := range latest {
+			ts = append(ts, w.Ranges.Evaluate(unit, j.tel.Readings)...)
+		}
+		if len(ts) > 0 {
+			w.Do(w.RangeOp(ts))
+		}
 	}
 	for unit, j := range latest {
 		w.hub.Publish("unit.reading", map[string]any{"unit_id": unit, "effective_at_utc": storage.FormatTime(j.effective),
@@ -335,6 +353,34 @@ func nullIfEmpty(s string) any {
 
 var _ = strings.TrimSpace
 
+// RangeOp opens or resolves crop-profile range incidents in the writer's single transaction lane.
+func (w *Writer) RangeOp(ts []crops.Transition) Op {
+	return Op{Name: "incidents.range", Fn: func(ctx context.Context, tx *sql.Tx) (func(), error) {
+		now := storage.Now()
+		var changes []incidents.Change
+		for _, t := range ts {
+			c, err := incidents.SetCondition(ctx, tx, w.siteID, t.UnitID, t.Code, t.Active, now)
+			if err != nil {
+				return nil, err
+			}
+			if c == nil {
+				continue
+			}
+			if w.syncOutbox.Load() {
+				if err := edgesync.EnqueueIncident(ctx, tx, w.siteID, c.Incident); err != nil {
+					return nil, err
+				}
+			}
+			changes = append(changes, *c)
+		}
+		return func() {
+			for _, c := range changes {
+				w.hub.Publish("incident.updated", c.Incident)
+			}
+		}, nil
+	}}
+}
+
 // reconstructOp pairs a stored FAULT_RAISED with the first later FAULT_CLEARED of the same code in the
 // same boot (they may arrive in either order during a replay) and records an outage-only fault.
 func (w *Writer) reconstructOp(device, unit, boot, code string) Op {
@@ -372,7 +418,7 @@ func (w *Writer) reconstructOp(device, unit, boot, code string) Op {
 						return nil, err
 					}
 					if c != nil {
-						if w.syncOutbox {
+						if w.syncOutbox.Load() {
 							if err := edgesync.EnqueueIncident(ctx, tx, w.siteID, c.Incident); err != nil {
 								return nil, err
 							}

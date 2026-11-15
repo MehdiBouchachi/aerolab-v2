@@ -2,7 +2,7 @@
 # and AddressSanitizer + UBSan so memory/UB bugs in the safety code fail the build.
 CC ?= gcc
 C := ../../components
-SRC := $(C)/controller/src/controller.c $(C)/protocol/src/protocol.c $(C)/protocol/src/jsonscan.c \
+SRC := $(C)/controller/src/controller.c $(C)/protocol/src/protocol.c $(C)/protocol/src/jsonscan.c $(C)/protocol/src/setup_code.c \
        $(C)/message_buffer/src/message_buffer.c $(C)/config_store/src/config_store.c $(C)/command_handler/src/command_handler.c \
        $(C)/board_profile/src/board_profile.c
 INC := -I$(C)/controller/include -I$(C)/safety/include -I$(C)/protocol/include -I$(C)/message_buffer/include \

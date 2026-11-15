@@ -90,3 +90,15 @@ Fixed:
 
 Efficiency: see `docs/performance/efficiency-2026-11-15.md` (unit list ~48% faster, sync snapshot ~44% faster, unchanged
 sync state no longer re-uploaded, -13% initial web JS; an ingest change with no measurable gain was reverted).
+
+## Fleet management (self-service Pis, units, crop profiles)
+Design and limits: [`docs/architecture/fleet-management.md`](../architecture/fleet-management.md).
+| Item | State | Evidence |
+|---|---|---|
+| Add / rename / retire units from the dashboard; edge issues broker credentials | ✅ dev machine | `TestF1_…` (real Mosquitto: controller joins with only the setup code; retired credential refused), mutation-checked; httpapi + broker tests |
+| Crop profiles, per-unit assignment, range alerts (no crop values shipped) | ✅ | crops + httpapi tests, `TestF1_…`, browser walkthrough |
+| Cloud sign-up with organisation kind, claim codes, Pi connects itself, re-link, fleet overview | ✅ | cloud API tests (PostgreSQL) incl. hijack refusal and rate limit; `TestF2_…` (connect, restart, disconnect, reconnect), mutation-checked |
+| Web screens for all of the above | ✅ | 17 vitest tests; Playwright walkthrough desktop + 390 px phone, no console errors, no horizontal overflow |
+| Controller setup page + Wi-Fi bring-up | 🟡 decoder host-tested (759 checks, ASan/UBSan); ESP-IDF glue compiles, **never run on hardware** | `make fw-test`, `idf.py build` (v5.3) |
+| Pi systemd path unit reloading the broker | 🟡 written, **never run on a Pi** | – |
+| Mobile app fleet/crop/add-unit screens | ⛔ | – |

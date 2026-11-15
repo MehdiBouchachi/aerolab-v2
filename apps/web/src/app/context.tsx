@@ -6,7 +6,7 @@ import type { Session } from '../api/types'
 type Listener = (e: SseEvent) => void
 interface Ctx {
   session: Session | null; stream: StreamState; lastEventAt: number | null
-  signIn: (u: string, p: string) => Promise<void>; signOut: () => Promise<void>; selectSite: (id: string) => Promise<void>
+  signIn: (u: string, p: string) => Promise<void>; signUp: (b: object) => Promise<void>; signOut: () => Promise<void>; selectSite: (id: string) => Promise<void>
   subscribe: (l: Listener) => () => void
   can: (cap: string) => boolean
 }
@@ -29,7 +29,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [drop])
 
   // one live stream per signed-in session; consumers refetch on events
-  const siteId = session?.site.id
+  const siteId = session?.site?.id
   useEffect(() => {
     if (!siteId) return
     if (IS_CLOUD) { setStream('polling'); return } // the cloud has no live stream: views poll and show their age
@@ -42,6 +42,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const r = await api<{ token: string }>('POST', P.login, IS_CLOUD ? { email: username, password } : { username, password })
       setToken(r.token)
       setSession(await api<Session>('GET', P.session(readSite())))
+    },
+    async signUp(body) {
+      const r = await api<{ token: string }>('POST', '/api/v1/auth/signup', body)
+      setToken(r.token)
+      setSession(await api<Session>('GET', P.session()))
     },
     async signOut() { try { await api('POST', P.logout) } finally { drop() } },
     async selectSite(id) { try { sessionStorage.setItem('aerolab_site', id) } catch { /* ignore */ } setSession(await api<Session>('GET', P.session(id))) },

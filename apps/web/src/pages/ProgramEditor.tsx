@@ -28,7 +28,7 @@ const PENDING = ['PENDING', 'SENT', 'PENDING_SITE', 'PENDING_DEVICE']
 
 export function ProgramEditor({ unit, pending, onChanged }: { unit: Unit; pending: Command | null; onChanged: () => void }) {
   const { can, subscribe, session } = useApp()
-  const site = session!.site.id
+  const site = session!.site!.id
   const [draft, setDraft] = useState<Draft>({ on: '', off: '', max: '' })
   const [touched, setTouched] = useState<Partial<Record<keyof Draft, boolean>>>({})
   const [review, setReview] = useState(false)

@@ -48,12 +48,13 @@ type Service struct {
 	db      *sql.DB
 	rl      *limiter
 	rlIP    *limiter
+	rlClaim *limiter
 	hashSem chan struct{}
 	dummy   string
 }
 
 func New(db *sql.DB) *Service {
-	s := &Service{db: db, rl: newLimiter(5, 5*time.Minute), rlIP: newLimiter(30, 5*time.Minute), hashSem: make(chan struct{}, 4)}
+	s := &Service{db: db, rl: newLimiter(5, 5*time.Minute), rlIP: newLimiter(30, 5*time.Minute), rlClaim: newLimiter(10, 15*time.Minute), hashSem: make(chan struct{}, 4)}
 	s.dummy, _ = hash("dummy-password-for-timing")
 	return s
 }
@@ -197,16 +198,26 @@ func (s *Service) SiteRole(ctx context.Context, userID, siteID string) (Role, bo
 // ----- edge credentials (per site; hashed; rotatable; revocable)
 
 func (s *Service) IssueEdgeToken(ctx context.Context, siteID string, revokeOld bool) (string, error) {
-	tok, err := NewToken()
-	if err != nil {
-		return "", err
-	}
-	tok = "aeroedge_" + tok
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
 	}
 	defer tx.Rollback() //nolint:errcheck
+	tok, err := IssueEdgeTokenTx(ctx, tx, siteID, revokeOld)
+	if err != nil {
+		return "", err
+	}
+	return tok, tx.Commit()
+}
+
+// IssueEdgeTokenTx issues a site's edge token inside the caller's transaction (used by Pi claims, so a
+// site never exists without the credential its Pi was promised).
+func IssueEdgeTokenTx(ctx context.Context, tx *sql.Tx, siteID string, revokeOld bool) (string, error) {
+	tok, err := NewToken()
+	if err != nil {
+		return "", err
+	}
+	tok = "aeroedge_" + tok
 	if revokeOld {
 		if _, err := tx.ExecContext(ctx, `UPDATE site_edge_credentials SET revoked_at=now() WHERE site_id=$1 AND revoked_at IS NULL`, siteID); err != nil {
 			return "", err
@@ -215,8 +226,16 @@ func (s *Service) IssueEdgeToken(ctx context.Context, siteID string, revokeOld b
 	if _, err := tx.ExecContext(ctx, `INSERT INTO site_edge_credentials(id,site_id,token_hash) VALUES ($1,$2,$3)`, NewID(), siteID, tokHash(tok)); err != nil {
 		return "", err
 	}
-	return tok, tx.Commit()
+	return tok, nil
 }
+
+// HashCode hashes a one-time code for storage (codes are high-entropy, so a plain SHA-256 suffices).
+func HashCode(code string) string { return tokHash(code) }
+
+// ClaimAllowed / ClaimFailed rate-limit Pi claim attempts per client address, so claim codes cannot
+// be guessed online.
+func (s *Service) ClaimAllowed(ip string) bool { return s.rlClaim.allow(ip) }
+func (s *Service) ClaimFailed(ip string)       { s.rlClaim.fail(ip) }
 
 // EdgeSite resolves a bearer token to the ONE site it may act for.
 func (s *Service) EdgeSite(ctx context.Context, tok string) (string, error) {

@@ -14,7 +14,28 @@ export interface Unit {
   fault_codes: string[]; firmware_version: string | null
   controller_buffer: { occupancy: number; capacity: number; unreceipted: number; overflow_count: number } | null
   active_incidents: Record<string, number>; latest_readings: Snapshot | null
+  crop?: CropRef | null
 }
+export interface CropRef { profile_id: string; profile_name: string; crop: string; variety?: string; assigned_at: string }
+export interface Range { min?: number; max?: number }
+export interface CropProfile {
+  id: string; name: string; crop: string; variety?: string; notes?: string; value_source: string
+  thresholds: Record<string, Range>; program?: Program; version: number
+  created_by: string; created_at: string; updated_at: string; unit_count: number
+}
+export interface SetupBundle {
+  setup: { v: number; site_id: string; device_id: string; unit_id: string; mqtt_uri: string; mqtt_user: string; mqtt_pass: string }
+  setup_code: string; shown_once: string; warning?: string; note?: string; unit?: { id: string; name: string; device_id: string }
+}
+export interface LinkInfo { linked: boolean; url?: string; organization_name?: string; linked_by?: string; linked_at?: string; configured_by_installer: boolean }
+export type OrgKind = 'PERSONAL' | 'BUSINESS' | 'GOVERNMENT'
+export interface Org { id: string; name: string; kind: OrgKind; role: 'OWNER' | 'MEMBER'; site_count: number }
+export interface FleetSite {
+  id: string; name: string; role: Role; stale: boolean; last_sync_at: string | null; edge_version: string | null
+  units_total: number; units_online: number; units_attention: number; units_without_crop: number
+  crops: { crop: string; units: number }[]; active_incidents: Record<string, number>
+}
+export interface Fleet { organizations: { id: string; name: string; kind: OrgKind; sites: FleetSite[] }[]; observed_at: string; note: string }
 export interface Program {
   mode: 'TIMED_CYCLE'; on_duration_seconds: number; off_duration_seconds: number
   max_continuous_on_seconds: number; require_reservoir_ok: true
@@ -36,7 +57,7 @@ export interface SiteRef { id: string; name: string; role: Role; stale?: boolean
 export interface Session {
   sites?: SiteRef[]
   user: { id: string; username: string; role: Role }; source: 'local' | 'cloud'
-  capabilities: string[]; site: { id: string; name: string }
+  capabilities: string[]; site: { id: string; name: string } | null
   simulated_data_accepted: boolean; server_time: string
 }
 export interface Summary {
