@@ -114,6 +114,7 @@ type cloudSite struct {
 	email   string
 	pw      string
 	db      *sql.DB
+	extra   []string // extra cloud env, e.g. AEROLAB_CLOUD_SIGNUP=open
 }
 
 func (s *stack) cloudEnv(dsn string, extra ...string) []string {
@@ -150,6 +151,7 @@ func (c *cloudSite) startProc(intentTTL, staleAfter string) {
 	cmd := exec.Command(buildCloud(s.t), "serve")
 	cmd.Env = s.cloudEnv(c.dsn, fmt.Sprintf("AEROLAB_CLOUD_HTTP_ADDR=127.0.0.1:%d", c.port), "AEROLAB_CLOUD_COOKIE_SECURE=false",
 		"AEROLAB_CLOUD_INTENT_TTL="+intentTTL, "AEROLAB_CLOUD_STALE_AFTER="+staleAfter, "AEROLAB_CLOUD_STATIC_DIR="+os.Getenv("AEROLAB_WEB_CLOUD"))
+	cmd.Env = append(cmd.Env, c.extra...)
 	logf, _ := os.Create(filepath.Join(s.dir, "cloud.log"))
 	cmd.Stdout, cmd.Stderr = logf, logf
 	if err := cmd.Start(); err != nil {

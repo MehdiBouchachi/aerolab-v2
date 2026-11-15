@@ -251,6 +251,7 @@ func (s *Server) edgeClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var tok, orgID, orgName string
+	reclaimed := false
 	errBadCode := errors.New("bad code")
 	errSiteTaken := errors.New("site taken")
 	err := s.tx(r.Context(), func(tx *sql.Tx) error {
@@ -260,11 +261,25 @@ func (s *Server) edgeClaim(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return errBadCode
 		}
-		if _, err := tx.ExecContext(r.Context(), `INSERT INTO sites(id,org_id,name,edge_version) VALUES ($1,$2,$3,NULLIF($4,''))`, in.SiteID, orgID, in.SiteName, in.EdgeVersion); err != nil {
-			if strings.Contains(err.Error(), "duplicate") {
+		// A Pi that was disconnected or reinstalled comes back with the same site id. With a code from
+		// the SAME organisation it is re-linked and its previous token revoked; another organisation's
+		// code can never take a site over.
+		res, err := tx.ExecContext(r.Context(), `INSERT INTO sites(id,org_id,name,edge_version) VALUES ($1,$2,$3,NULLIF($4,'')) ON CONFLICT (id) DO NOTHING`, in.SiteID, orgID, in.SiteName, in.EdgeVersion)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			var owner string
+			if err := tx.QueryRowContext(r.Context(), `SELECT org_id FROM sites WHERE id=$1 FOR UPDATE`, in.SiteID).Scan(&owner); err != nil {
+				return err
+			}
+			if owner != orgID {
 				return errSiteTaken
 			}
-			return err
+			if _, err := tx.ExecContext(r.Context(), `UPDATE sites SET name=$2, edge_version=NULLIF($3,'') WHERE id=$1`, in.SiteID, in.SiteName, in.EdgeVersion); err != nil {
+				return err
+			}
+			reclaimed = true
 		}
 		if _, err := tx.ExecContext(r.Context(), `UPDATE site_claim_codes SET site_id=$1 WHERE code_hash=$2`, in.SiteID, auth.HashCode(normalizeClaim(in.Code))); err != nil {
 			return err
@@ -278,7 +293,7 @@ func (s *Server) edgeClaim(w http.ResponseWriter, r *http.Request) {
 		if err := tx.QueryRowContext(r.Context(), `SELECT name FROM organizations WHERE id=$1`, orgID).Scan(&orgName); err != nil {
 			return err
 		}
-		tok, err = auth.IssueEdgeTokenTx(r.Context(), tx, in.SiteID, false)
+		tok, err = auth.IssueEdgeTokenTx(r.Context(), tx, in.SiteID, reclaimed)
 		return err
 	})
 	switch {
@@ -286,11 +301,15 @@ func (s *Server) edgeClaim(w http.ResponseWriter, r *http.Request) {
 		s.Auth.ClaimFailed(ip)
 		writeErr(w, r, 400, "INVALID_CLAIM_CODE", "this code is wrong, expired or already used; create a new one in the cloud dashboard", nil)
 	case errors.Is(err, errSiteTaken):
-		writeErr(w, r, 409, "SITE_ID_TAKEN", "a Pi with this site id is already connected to this service", nil)
+		writeErr(w, r, 409, "SITE_ID_TAKEN", "A Pi with this site id belongs to another organisation on this service. Contact that organisation, or give this Pi a different site id.", nil)
 	case err != nil:
 		s.fail(w, r, err)
 	default:
-		s.audit(r.Context(), in.SiteID, "", "edge", "site.claimed", in.SiteID, map[string]string{"org_id": orgID})
+		action := "site.claimed"
+		if reclaimed {
+			action = "site.reclaimed"
+		}
+		s.audit(r.Context(), in.SiteID, "", "edge", action, in.SiteID, map[string]string{"org_id": orgID})
 		writeJSON(w, 201, map[string]any{"token": tok, "site_id": in.SiteID, "organization": map[string]string{"id": orgID, "name": orgName}})
 	}
 }

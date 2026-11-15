@@ -8,7 +8,7 @@ import { ago, clock } from '../app/format'
 import { Badge, Empty, ErrorNote, Loading } from '../components/ui'
 
 export function Incidents() {
-  const { session, can } = useApp(); const site = session!.site.id
+  const { session, can } = useApp(); const site = session!.site!.id
   const [state, setState] = useState<'active' | 'resolved'>('active')
   const [err, setErr] = useState<ApiError | null>(null)
   const list = useFetch<{ incidents: Incident[] }>(`/api/v1/sites/${site}/incidents?state=${state}&limit=100`, ['incident.updated'])

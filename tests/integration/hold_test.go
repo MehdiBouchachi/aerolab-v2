@@ -3,6 +3,7 @@ package integration
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -49,4 +50,27 @@ func mergeEnv(a, b map[string]string) map[string]string {
 		}
 	}
 	return a
+}
+
+// AEROLAB_HOLD_FLEET=<seconds>: a Pi NOT yet connected to the cloud, with self-service units enabled,
+// and a cloud with sign-up open and one organisation owner, to walk through the fleet screens.
+func TestHoldFleetForManualBrowsing(t *testing.T) {
+	secs, _ := strconv.Atoi(os.Getenv("AEROLAB_HOLD_FLEET"))
+	if secs == 0 {
+		t.Skip("set AEROLAB_HOLD_FLEET=<seconds>")
+	}
+	s := newStack(t, 2)
+	s.startBroker()
+	c := s.startCloudWithoutSite()
+	c.stop()
+	c.extra = []string{"AEROLAB_CLOUD_SIGNUP=open"}
+	c.startProc("60s", "6s")
+	mdir := filepath.Join(s.dir, "dev", "mosquitto")
+	s.startEdge(map[string]string{"AEROLAB_STATIC_DIR": os.Getenv("AEROLAB_WEB_LOCAL"), "AEROLAB_CLOUD_ALLOW_INSECURE": "true", "AEROLAB_CLOUD_SYNC_INTERVAL": "1s",
+		"AEROLAB_BROKER_PASSWD_FILE": filepath.Join(mdir, "passwd"), "AEROLAB_BROKER_PID_FILE": filepath.Join(mdir, "mosquitto.pid")})
+	s.startFleet(2, nil)
+	factoryProgram(s, 2)
+	s.waitUntil(20*time.Second, "online", func() bool { return s.allOnline(2) })
+	fmt.Printf("HOLD edge=%d cloud=%d broker=%s\nHOLD-EDGE-PW=%s\nHOLD-CLOUD=%s / %s\n", s.edgePort, c.port, s.prov.BrokerURL, s.prov.AdminPassword, c.email, c.pw)
+	time.Sleep(time.Duration(secs) * time.Second)
 }

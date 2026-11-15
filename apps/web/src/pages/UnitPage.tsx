@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useFetch } from '../app/hooks'
-import type { Command, History, Incident, Program, Unit } from '../api/types'
+import type { Command, CropProfile, History, Incident, Program, Unit } from '../api/types'
 import { ago, clock, label, showReading, unitStatus } from '../app/format'
 import { Badge, Empty, ErrorNote, Loading, Sim } from '../components/ui'
 import { Chart } from '../components/Chart'
 import { ProgramEditor } from './ProgramEditor'
 import { useApp } from '../app/context'
-import { P } from '../api/paths'
+import { HOME, IS_CLOUD, P } from '../api/paths'
+import { lazy, Suspense } from 'react'
+import { useNavigate } from 'react-router-dom'
+
+const UnitSettings = lazy(() => import('./UnitSettings').then(m => ({ default: m.UnitSettings })))
 
 const RANGES = [['1h', 3600e3], ['6h', 6 * 3600e3], ['24h', 24 * 3600e3], ['7d', 7 * 86400e3]] as const
 const CHARTS = ['water_temp_c', 'ph', 'ec_ms_cm', 'air_temp_c', 'relative_humidity_pct']
@@ -15,7 +19,7 @@ const CHARTS = ['water_temp_c', 'ph', 'ec_ms_cm', 'air_temp_c', 'relative_humidi
 export function UnitPage() {
   const { unitId = '' } = useParams()
   const { session } = useApp()
-  const site = session!.site.id
+  const site = session!.site!.id
   const [range, setRange] = useState<(typeof RANGES)[number][0]>('1h')
   const u = useFetch<{ unit: Unit; pending_command: Command | null }>(P.unit(site, unitId), ['unit.state', 'unit.reading', 'program.updated', 'incident.updated'])
   const win = RANGES.find(r => r[0] === range)![1]
@@ -25,15 +29,20 @@ export function UnitPage() {
   const hist = useFetch<History>(`${P.history(site, unitId)}?from=${encodeURIComponent(new Date(now - win).toISOString())}&to=${encodeURIComponent(new Date(now).toISOString())}`, [], 0)
   const prog = useFetch<{ applied: { version: number; program: Program; applied_at: string } | null; controller_reported_version: number | null }>(P.applied(site, unitId), ['program.updated'])
   const inc = useFetch<{ incidents: Incident[] }>(`/api/v1/sites/${site}/incidents?unit_id=${unitId}&state=active`, ['incident.updated'])
+  const profileId = u.data?.unit.crop?.profile_id
+  const crop = useFetch<CropProfile>(!IS_CLOUD && profileId ? `/api/v1/crop-profiles/${profileId}` : null, ['crop_profile.updated'], 0)
+  const ranges = crop.data && Object.keys(crop.data.thresholds).length ? crop.data.thresholds : null
+  const nav = useNavigate()
 
   if (u.loading) return <Loading what="unit" />
-  if (!u.data) return <><ErrorNote error={u.error} retry={u.reload} /><Link to="/">← Overview</Link></>
+  if (!u.data) return <><ErrorNote error={u.error} retry={u.reload} /><Link to={HOME}>← Overview</Link></>
   const unit = u.data.unit; const st = unitStatus(unit); const r = unit.latest_readings
 
   return (
     <>
-      <p><Link to="/">← Overview</Link></p>
+      <p><Link to={HOME}>← Overview</Link></p>
       <h1>{unit.name} {unit.is_simulated && <Sim />}</h1>
+      <p className="muted">{unit.crop ? <>Growing <b>{unit.crop.crop}</b>{unit.crop.variety && ` (${unit.crop.variety})`} · profile “{unit.crop.profile_name}”</> : 'No crop profile assigned: no crop-specific alerts.'}</p>
       <ErrorNote error={u.error} retry={u.reload} />
       <section className="panel" aria-label="Controller status">
         <Badge tone={st.tone}>{st.text}</Badge>
@@ -56,8 +65,11 @@ export function UnitPage() {
       {!r ? <Empty>No readings have been stored for this unit yet.</Empty> : (
         <>
           <p className="muted small">Taken {ago(r.effective_at_utc)} ({clock(r.effective_at_utc)}) · {r.time_quality === 'DEVICE_CLOCK' ? 'controller clock' : r.time_quality === 'ESTIMATED_FROM_UPTIME' ? 'time estimated from controller uptime' : 'time = when the Pi received it'}{r.outdated && <b> · OUTDATED – not current</b>}</p>
-          <table className="readings"><thead><tr><th>Sensor</th><th>Value</th><th>Quality</th></tr></thead><tbody>
-            {Object.entries(r.readings).map(([k, v]) => <tr key={k}><td>{label(k)}</td><td className={v.quality === 'valid' ? '' : 'dim'}>{showReading(v)}</td><td>{v.quality}</td></tr>)}
+          <table className="readings"><thead><tr><th>Sensor</th><th>Value</th><th>Quality</th>{ranges && <th>Crop range</th>}</tr></thead><tbody>
+            {Object.entries(r.readings).map(([k, v]) => {
+              const rg = ranges?.[k]; const out = rg && v.quality === 'valid' && typeof v.value === 'number' && ((rg.min !== undefined && v.value < rg.min) || (rg.max !== undefined && v.value > rg.max))
+              return <tr key={k}><td>{label(k)}</td><td className={v.quality === 'valid' ? '' : 'dim'}>{showReading(v)}{out && <b> · outside range</b>}</td><td>{v.quality}</td>{ranges && <td>{rg ? `${rg.min ?? '–'} to ${rg.max ?? '–'}` : ''}</td>}</tr>
+            })}
           </tbody></table>
         </>)}
 
@@ -77,6 +89,7 @@ export function UnitPage() {
         ? <p>Applied version <b>{prog.data.applied.version}</b> (confirmed {clock(prog.data.applied.applied_at)}): pump on {prog.data.applied.program.on_duration_seconds} s, off {prog.data.applied.program.off_duration_seconds} s, max continuous {prog.data.applied.program.max_continuous_on_seconds} s.</p>
         : <p className="muted">No programme has been confirmed through this Pi yet{prog.data?.controller_reported_version ? ` (controller reports version ${prog.data.controller_reported_version})` : ''}.</p>}
       <ProgramEditor unit={unit} pending={u.data.pending_command} onChanged={() => { u.reload(); prog.reload() }} />
+      {!IS_CLOUD && <Suspense fallback={null}><UnitSettings unit={unit} onChanged={u.reload} onGone={() => nav(HOME)} /></Suspense>}
     </>
   )
 }

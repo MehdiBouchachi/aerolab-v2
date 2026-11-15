@@ -87,8 +87,26 @@ func TestClaimCodesConnectPisAndFleetOverview(t *testing.T) {
 	if w := e.do("POST", "/api/v1/edge/claim", "", map[string]any{"code": code, "site_id": "site-south-01", "site_name": "South"}); w.Code != 400 {
 		t.Fatalf("code reused: %d", w.Code)
 	}
-	if w := e.do("POST", "/api/v1/edge/claim", "", map[string]any{"code": claim(), "site_id": "site-north-01", "site_name": "Dup"}); w.Code != 409 {
-		t.Fatalf("duplicate site id: %d", w.Code)
+	// the same Pi reconnecting (disconnected / reinstalled) with a new code from ITS organisation is
+	// re-linked and the old token stops working
+	w2 := e.do("POST", "/api/v1/edge/claim", "", map[string]any{"code": claim(), "site_id": "site-north-01", "site_name": "North greenhouse"})
+	if w2.Code != 201 {
+		t.Fatalf("reconnect: %d %s", w2.Code, w2.Body)
+	}
+	if w := e.do("POST", "/api/v1/edge/sync/batch", got.Token, batch("site-north-01", nil)); w.Code != 401 {
+		t.Fatalf("old token still accepted after re-link: %d", w.Code)
+	}
+	_ = json.Unmarshal(w2.Body.Bytes(), &got)
+	// another organisation can never take the site over
+	e.exec(`INSERT INTO organizations(id,name,kind) VALUES ('org-other','Other','BUSINESS')`)
+	e.exec(`INSERT INTO organization_members(org_id,user_id,role) VALUES ('org-other',$1,'OWNER')`, stranger)
+	var oc struct{ Code string }
+	_ = json.Unmarshal(e.do("POST", "/api/v1/orgs/org-other/site-claims", e.tok["other@farm.example"], nil).Body.Bytes(), &oc)
+	if w := e.do("POST", "/api/v1/edge/claim", "", map[string]any{"code": oc.Code, "site_id": "site-north-01", "site_name": "Hijack"}); w.Code != 409 {
+		t.Fatalf("another organisation took the site: %d %s", w.Code, w.Body)
+	}
+	if n := e.count(`SELECT COUNT(*) FROM site_members WHERE site_id='site-north-01' AND user_id=$1`, stranger); n != 0 {
+		t.Fatal("hijack attempt granted access")
 	}
 	// the new token syncs like any edge token
 	e.edge["site-north-01"] = got.Token
@@ -133,7 +151,6 @@ func TestClaimCodesConnectPisAndFleetOverview(t *testing.T) {
 	if w := e.do("PUT", "/api/v1/orgs/org-coop/members", e.tok["owner@coop.example"], map[string]any{"email": "worker@coop.example", "role": "MEMBER"}); w.Code != 200 {
 		t.Fatalf("add member: %d %s", w.Code, w.Body)
 	}
-	_ = stranger
 }
 
 func TestClaimAttemptsAreRateLimited(t *testing.T) {

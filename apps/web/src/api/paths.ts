@@ -2,6 +2,8 @@
 // talks to; paths differ only where the cloud needs a site in the URL.
 export const SOURCE: 'local' | 'cloud' = import.meta.env.VITE_SOURCE === 'cloud' ? 'cloud' : 'local'
 export const IS_CLOUD = SOURCE === 'cloud'
+/** The selected site's overview: the cloud's home page is the fleet of every Pi. */
+export const HOME = IS_CLOUD ? '/site' : '/'
 
 export const P = {
   login: IS_CLOUD ? '/api/v1/auth/login' : '/api/v1/local/auth/login',

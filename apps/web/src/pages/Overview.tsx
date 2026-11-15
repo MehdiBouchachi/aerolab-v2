@@ -4,11 +4,12 @@ import { useFetch } from '../app/hooks'
 import type { Incident, Summary, Unit } from '../api/types'
 import { ago, label, showReading, unitStatus } from '../app/format'
 import { Badge, Empty, ErrorNote, Loading, Sim } from '../components/ui'
+import { IS_CLOUD } from '../api/paths'
 
 const KEYS = ['water_temp_c', 'ph', 'ec_ms_cm', 'reservoir_level_ok']
 
 export function Overview() {
-  const { session } = useApp(); const site = session!.site.id
+  const { session, can } = useApp(); const site = session!.site!.id
   const units = useFetch<{ units: Unit[]; total: number }>(`/api/v1/sites/${site}/units?limit=100`, ['unit.state', 'unit.reading', 'incident.updated', 'program.updated'])
   const sum = useFetch<Summary>(`/api/v1/sites/${site}/summary`, ['unit.state', 'incident.updated'])
   const inc = useFetch<{ incidents: Incident[] }>(`/api/v1/sites/${site}/incidents?state=active`, ['incident.updated'])
@@ -39,9 +40,12 @@ export function Overview() {
           <Link to="/incidents">All alerts →</Link>
         </section>
       )}
-      <h2>Growing units</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+        <h2>Growing units</h2>
+        {!IS_CLOUD && can('manage_devices') && <Link className="btn" to="/units/new">Add a unit</Link>}
+      </div>
       {units.loading && <Loading what="units" />}
-      {units.data && units.data.units.length === 0 && <Empty>No units are registered yet. An administrator can register a controller under Administration.</Empty>}
+      {units.data && units.data.units.length === 0 && <Empty>No units yet.{!IS_CLOUD && can('manage_devices') ? ' Use “Add a unit” to connect your first controller.' : ' An administrator can add them.'}</Empty>}
       <div className="cards">
         {units.data?.units.map(u => {
           const st = unitStatus(u); const r = u.latest_readings
@@ -49,6 +53,7 @@ export function Overview() {
             <article key={u.id} className={`card ${st.tone}`}>
               <header><h3>{u.name}</h3>{u.is_simulated && <Sim />}</header>
               <Badge tone={st.tone}>{st.text}</Badge>
+              <p className="small" style={{ margin: 0 }}>{u.crop ? <><b>{u.crop.crop}</b> · {u.crop.profile_name}</> : <span className="muted">No crop profile</span>}</p>
               {u.connection !== 'ONLINE' && u.last_state_at && <p className="muted small">Last heard {ago(u.last_state_at)}. {u.connection === 'STALE' && 'The controller may still be irrigating on its own programme.'}</p>}
               <dl>
                 <dt>Pump</dt><dd>{u.pump_commanded ? `commanded ${u.pump_commanded}` : 'unknown'}<span className="muted small"> · flow not verified</span></dd>

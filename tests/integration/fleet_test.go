@@ -205,7 +205,14 @@ func TestF2_ConnectAPiToTheCloudWithAClaimCode(t *testing.T) {
 	if code := s.call("POST", "/api/v1/cloud-link", s.admin(), map[string]any{"cloud_url": c.wan.URL(), "code": claim.Code}, &bad); code != 400 {
 		t.Fatalf("a used code connected again: %d", code)
 	}
-	if s.allOnline(2) != true {
+	// reconnecting the same Pi with a NEW code from its organisation works (no support call)
+	var again struct{ Code string }
+	c.call("POST", "/api/v1/orgs/org-it/site-claims", nil, &again)
+	if code := s.call("POST", "/api/v1/cloud-link", s.admin(), map[string]any{"cloud_url": c.wan.URL(), "code": again.Code}, nil); code != 201 {
+		t.Fatalf("reconnect with a fresh code: %d", code)
+	}
+	s.waitUntil(15*time.Second, "sync resumes after reconnecting", func() bool { _, _, _, x := site(); return x != a })
+	if !s.allOnline(2) {
 		t.Fatal("local operation affected by cloud link changes")
 	}
 }

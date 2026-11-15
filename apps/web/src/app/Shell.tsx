@@ -4,27 +4,29 @@ import { useFetch } from './hooks'
 import type { Summary } from '../api/types'
 import { ago } from './format'
 import { Sim } from '../components/ui'
-import { IS_CLOUD } from '../api/paths'
+import { HOME, IS_CLOUD } from '../api/paths'
 
 export function Shell() {
   const { session, stream, signOut, can, selectSite } = useApp()
-  const sum = useFetch<Summary>(session ? `/api/v1/sites/${session.site.id}/summary` : null, ['unit.state', 'incident.updated', 'site.connectivity'])
+  const sum = useFetch<Summary>(session ? `/api/v1/sites/${session.site!.id}/summary` : null, ['unit.state', 'incident.updated', 'site.connectivity'])
   const s = sum.data
   return (
     <div className="shell">
       <header className="top">
         <div className="brand">AeroLab</div>
         <nav aria-label="Main">
-          <NavLink to="/" end>Overview</NavLink>
+          {IS_CLOUD && <NavLink to="/" end>All farms</NavLink>}
+          <NavLink to={HOME} end>{IS_CLOUD ? 'This Pi' : 'Overview'}</NavLink>
           <NavLink to="/incidents">Alerts{s && s.active_incidents.total > 0 ? <span className="count">{s.active_incidents.total}</span> : null}</NavLink>
+          {!IS_CLOUD && <NavLink to="/crops">Crop profiles</NavLink>}
           {can('manage_users') && <NavLink to="/admin">Administration</NavLink>}
         </nav>
         <div className="who">
           <span className="chip" title={IS_CLOUD ? 'A synchronised copy held in the cloud. It can be behind the site.' : 'This page talks to the Raspberry Pi on this site, not the cloud'}>{IS_CLOUD ? 'CLOUD' : 'LOCAL'}</span>
           {IS_CLOUD && (session?.sites?.length ?? 0) > 1
-            ? <select aria-label="Site" value={session?.site.id} onChange={e => void selectSite(e.target.value)}>{session!.sites!.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+            ? <select aria-label="Site" value={session?.site?.id} onChange={e => void selectSite(e.target.value)}>{session!.sites!.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
             : null}
-          <span>{session?.site.name} · {session?.user.username} ({session?.user.role.toLowerCase()})</span>
+          <span>{session?.site?.name} · {session?.user.username} ({session?.user.role.toLowerCase()})</span>
           <button className="link" onClick={() => void signOut()}>Sign out</button>
         </div>
       </header>

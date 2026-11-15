@@ -1,3 +1,4 @@
+import { validateForm } from './pages/Crops'
 import { describe, expect, it } from 'vitest'
 import { parseSse } from './api/client'
 import { segments, seriesOf } from './components/Chart'
@@ -74,5 +75,24 @@ describe('plain-language state', () => {
     const now = Date.parse('2026-11-12T12:00:00Z')
     expect(ago('2026-11-12T11:59:30Z', now)).toBe('30 s ago')
     expect(ago(null)).toBe('never')
+  })
+})
+
+describe('crop profile form (client hints only; the Pi re-validates)', () => {
+  const base = { name: 'Rack', crop: 'c', variety: '', notes: '', value_source: 'agronomist', withProgram: false, prog: { on: '', off: '', max: '' } }
+  it('needs who supplied the numbers, and never invents them', () => {
+    expect(validateForm({ ...base, value_source: ' ', rows: [{ key: '', min: '', max: '' }] }).value_source).toBeTruthy()
+    expect(validateForm({ ...base, rows: [{ key: '', min: '', max: '' }] })).toEqual({})
+  })
+  it('checks each range row', () => {
+    expect(validateForm({ ...base, rows: [{ key: 'ph', min: '2', max: '1' }] }).row0).toMatch(/below/)
+    expect(validateForm({ ...base, rows: [{ key: 'ph', min: '', max: '' }] }).row0).toMatch(/minimum/)
+    expect(validateForm({ ...base, rows: [{ key: 'ph', min: 'x', max: '' }] }).row0).toMatch(/Numbers/)
+    expect(validateForm({ ...base, rows: [{ key: 'ph', min: '1', max: '' }, { key: 'ph', min: '', max: '3' }] }).row1).toMatch(/twice/)
+    expect(validateForm({ ...base, rows: [{ key: 'ph', min: '', max: '3' }] })).toEqual({})
+  })
+  it('validates an included programme like the programme editor', () => {
+    const e = validateForm({ ...base, rows: [], withProgram: true, prog: { on: '10', off: '20', max: '5' } })
+    expect(e.prog_max).toMatch(/pump-on/)
   })
 })
