@@ -134,8 +134,8 @@ TEST(manual_pump_test_is_not_a_command_type) {
 }
 
 /* ------------------------------------------------------------- journal */
-typedef struct { char data[16][64]; int len[16]; } ram_be_t;
-static int ram_put(void *x, int s, const char *d, size_t l) { ram_be_t *r = x; if (l > 64) return -1; memcpy(r->data[s], d, l); r->len[s] = (int)l; return 0; }
+typedef struct { char data[16][256]; int len[16]; } ram_be_t;
+static int ram_put(void *x, int s, const char *d, size_t l) { ram_be_t *r = x; if (l > 256) return -1; memcpy(r->data[s], d, l); r->len[s] = (int)l; return 0; }
 static int ram_get(void *x, int s, char *b, size_t cap) { ram_be_t *r = x; if ((size_t)r->len[s] > cap) return -1; memcpy(b, r->data[s], (size_t)r->len[s]); return r->len[s]; }
 static void ram_del(void *x, int s) { ram_be_t *r = x; r->len[s] = 0; }
 static const mb_backend_t RAM = {ram_put, ram_get, ram_del};
@@ -163,6 +163,32 @@ TEST(journal_replay_is_batched_critical_first_inflight_limited_and_resends) {
     n = mb_next_batch(&m, 1000, 15000, 5, 8, out); CHECK(n == 3); /* in-flight cap 8 */
     CHECK(mb_next_batch(&m, 1000, 15000, 5, 8, out) == 0);
     n = mb_next_batch(&m, 17000, 15000, 5, 8, out); CHECK(n == 5); /* receipt timeout => resend */
+}
+
+TEST(journal_index_is_rebuilt_from_flash_after_a_reboot) {
+    ram_be_t be; memset(&be, 0, sizeof be); mb_meta_t meta[8]; mb_t m; mb_init(&m, meta, 8, RAM, &be);
+    const char *crit = "{\"boot_id\":\"boot-aaaaaaaa\",\"seq\":3,\"type\":\"event\",\"severity\":\"critical\"}";
+    const char *tel1 = "{\"boot_id\":\"boot-aaaaaaaa\",\"seq\":4,\"type\":\"telemetry\"}";
+    const char *tel2 = "{\"boot_id\":\"boot-aaaaaaaa\",\"seq\":5,\"type\":\"telemetry\"}";
+    mb_append(&m, "boot-aaaaaaaa", 3, true, crit, strlen(crit));
+    mb_append(&m, "boot-aaaaaaaa", 4, false, tel1, strlen(tel1));
+    mb_append(&m, "boot-aaaaaaaa", 5, false, tel2, strlen(tel2));
+    /* reboot: RAM index lost, flash (backend) intact; one file is corrupt */
+    ram_put(&be, 6, "garbage{", 8);
+    mb_meta_t meta2[8]; mb_t r; mb_init(&r, meta2, 8, RAM, &be);
+    int restored = 0, rejected = 0; char b[256];
+    for (int s = 0; s < 8; s++) { int n = ram_get(&be, s, b, sizeof b); if (n <= 0) continue; if (mb_restore(&r, s, b, (size_t)n) == 0) restored++; else rejected++; }
+    CHECK(restored == 3); CHECK(rejected == 1); CHECK(mb_occupancy(&r) == 3);
+    bool crit_ok = false; for (int s = 0; s < 8; s++) crit_ok |= meta2[s].used && meta2[s].seq == 3 && meta2[s].critical; CHECK(crit_ok);
+    CHECK(mb_restore(&r, 0, crit, strlen(crit)) < 0); /* occupied slot */
+    CHECK(mb_restore(&r, 99, crit, strlen(crit)) < 0); /* out of range */
+    /* they are offered for (re)sending, critical first, and freed by a receipt for the OLD boot */
+    int out[8]; int n = mb_next_batch(&r, 1000, 15000, 8, 8, out); CHECK(n == 3); CHECK(meta2[out[0]].seq == 3);
+    /* new records of the new boot never overwrite restored slots */
+    int s2 = mb_append(&r, "boot-bbbbbbbb", 1, false, "x", 1);
+    CHECK(s2 >= 0 && meta2[s2].seq == 1 && !strcmp(meta2[s2].boot, "boot-bbbbbbbb")); CHECK(mb_occupancy(&r) == 4);
+    int still = 0; for (int s = 0; s < 8; s++) still += meta2[s].used && !strcmp(meta2[s].boot, "boot-aaaaaaaa"); CHECK(still == 3);
+    int64_t acks[] = {3, 4, 5}; CHECK(mb_reclaim(&r, "boot-aaaaaaaa", acks, 3) == 3); CHECK(mb_occupancy(&r) == 1);
 }
 
 /* ------------------------------------------------------------- config store */
@@ -293,7 +319,7 @@ int main(int argc, char **argv) {
     RUN(invalid_level_sensor_fails_safe_but_ph_ec_only_degrade); RUN(programme_bounds_and_hardware_cap); RUN(pump_on_time_is_bounded_even_if_programme_asks_for_more);
     RUN(board_profile_is_unconfigured_so_outputs_are_refused);
     RUN(commands_agree_with_the_shared_contract_fixtures); RUN(receipts_agree_with_the_shared_contract_fixtures); RUN(decoder_survives_truncation_mutation_and_garbage); RUN(manual_pump_test_is_not_a_command_type);
-    RUN(journal_is_bounded_critical_survives_and_gaps_are_counted); RUN(journal_frees_only_on_receipt_for_the_matching_boot); RUN(journal_replay_is_batched_critical_first_inflight_limited_and_resends);
+    RUN(journal_is_bounded_critical_survives_and_gaps_are_counted); RUN(journal_frees_only_on_receipt_for_the_matching_boot); RUN(journal_replay_is_batched_critical_first_inflight_limited_and_resends); RUN(journal_index_is_rebuilt_from_flash_after_a_reboot);
     RUN(config_store_roundtrip_and_power_cut_keeps_previous_programme); RUN(config_store_discards_corrupt_or_unsafe_records_instead_of_running_them);
     RUN(command_applies_dedups_conflicts_and_rejects_stale_sessions); RUN(persist_failure_changes_nothing_and_reboot_still_knows_the_last_command); RUN(query_state_and_commands_for_other_devices);
     RUN(encoders_fit_buffers_and_never_write_zero_for_missing);

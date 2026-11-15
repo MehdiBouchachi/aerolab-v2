@@ -10,7 +10,7 @@
  *
  * NOT BUILT/TESTED on a device. Cost to measure on real hardware: 360 snapshots + events per
  * 6 h outage must fit the partition and not wear it out (spec 14.4). On reboot the in-RAM
- * metadata is rebuilt by scanning the files (TODO - needs the device to validate).
+ * metadata is rebuilt by journal_fs_restore() (logic host-tested as mb_restore; this file I/O is not).
  */
 static const char *TAG = "journal";
 static int jput(void *ctx, int slot, const char *d, size_t n) {
@@ -31,4 +31,18 @@ int journal_fs_mount(void) {
     esp_err_t e = esp_vfs_spiffs_register(&c);
     if (e != ESP_OK) ESP_LOGE(TAG, "journal mount failed: %d (control continues; history is not buffered)", e);
     return e == ESP_OK ? 0 : -1;
+}
+
+/* Rebuild the RAM index from the files that survived a reboot; unreadable files are deleted (a counted gap). */
+int journal_fs_restore(mb_t *m) {
+    static char buf[1100];
+    int restored = 0;
+    for (int slot = 0; slot < m->cap; slot++) {
+        int n = jget(NULL, slot, buf, sizeof buf);
+        if (n <= 0) continue;
+        if (mb_restore(m, slot, buf, (size_t)n) == 0) restored++;
+        else { jdel(NULL, slot); m->overflow++; }
+    }
+    ESP_LOGI(TAG, "journal: %d buffered records restored after boot", restored);
+    return restored;
 }
