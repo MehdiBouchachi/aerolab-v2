@@ -3,7 +3,7 @@
 #   target "stack"  : DEMO site = Mosquitto + edge + SIMULATED controllers (all data labelled SIMULATOR)
 #   target "cloud"  : cloud API + cloud dashboard (needs PostgreSQL)
 
-FROM node:22-alpine AS web
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 RUN npm install -g pnpm@10.28.0
 WORKDIR /src
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
@@ -15,8 +15,9 @@ RUN pnpm install --frozen-lockfile --filter @aerolab/web \
  && cd apps/web && pnpm build \
  && VITE_SOURCE=cloud pnpm build --outDir dist-cloud
 
-FROM golang:1.24-alpine AS gobuild
-ENV CGO_ENABLED=0 GOFLAGS=-trimpath
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS gobuild
+ARG TARGETOS TARGETARCH
+ENV CGO_ENABLED=0 GOFLAGS=-trimpath GOOS=$TARGETOS GOARCH=$TARGETARCH
 WORKDIR /src
 COPY go.work go.work.sum ./
 COPY contracts ./contracts
