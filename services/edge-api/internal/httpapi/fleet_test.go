@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"os"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -217,5 +218,22 @@ func TestCropProfilesPerUnitAndRangeAlerts(t *testing.T) {
 	}
 	if w := e.do("DELETE", "/api/v1/crop-profiles/"+p.ID, e.toks[roles.Admin], nil); w.Code != 409 {
 		t.Fatalf("archived an assigned profile: %d", w.Code)
+	}
+}
+
+// The firmware decodes contracts/examples/setup/valid.code in its host tests; this proves the Pi
+// encodes exactly that string, so the Pi and the controller agree on the setup-code format.
+func TestSetupCodeFixtureMatchesTheEdgeEncoder(t *testing.T) {
+	e := newEnv(t)
+	e.srv.Cfg.SiteID = "site-fixture-01"
+	e.srv.Cfg.BrokerPublicURL = "mqtt://aerolab.local:1883"
+	r := httptest.NewRequest("POST", "/", nil)
+	got := e.srv.bundle(r, "esp32-fixture-01", "unit-fixture-01", "fixture-password-not-a-secret-0001")["setup_code"]
+	want, err := os.ReadFile("../../../../contracts/examples/setup/valid.code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != strings.TrimSpace(string(want)) {
+		t.Fatalf("edge setup code drifted from the firmware fixture:\n got %v\nwant %s", got, want)
 	}
 }

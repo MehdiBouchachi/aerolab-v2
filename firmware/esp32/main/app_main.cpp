@@ -31,6 +31,7 @@
 #include "nvs.h"
 #include "protocol.h"
 #include "sensors.h"
+#include "setup_portal.h"
 
 extern "C" {
 extern const cs_backend_t CS_NVS_BACKEND;
@@ -140,5 +141,12 @@ extern "C" void app_main(void) {
 
     xTaskCreate(control_task, "control", 4096, nullptr, 10, nullptr); /* highest app priority */
     net_cfg_t nc = {&g_id, &g_ch, &g_mb, &g_ctl, CONFIG_AEROLAB_FIRMWARE_VERSION, snapshot_fn};
-    net_start(&nc); /* Wi-Fi bring-up omitted in this skeleton: see README (needs provisioning decisions) */
+    if (!setup_is_provisioned()) {
+        /* no identity/credentials/Wi-Fi yet: offer the setup page; the control task keeps the unit
+           safe (no programme => NEEDS_SETUP, outputs off) */
+        setup_portal_start();
+        return;
+    }
+    wifi_sta_start();
+    net_start(&nc);
 }

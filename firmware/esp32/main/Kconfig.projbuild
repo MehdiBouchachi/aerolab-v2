@@ -8,6 +8,13 @@ menu "AeroLab"
     config AEROLAB_FIRMWARE_VERSION
         string "Firmware version string reported to the Pi"
         default "fw-0.1.0"
+    config AEROLAB_SETUP_AP_PASSWORD
+        string "Password of the controller's setup Wi-Fi (8-63 chars; empty = OPEN network)"
+        default ""
+        help
+          While unconfigured, the controller opens "AeroLab-Setup-XXXX" for the setup page. The setup
+          code entered there contains this controller's broker password, so production builds should
+          set a password (e.g. printed on the unit's label). Empty means an open network (bench use).
     config AEROLAB_SIMULATED_DATA
         bool "Mark this build's data_source as SIMULATOR (bench rigs without real sensors)"
         default n

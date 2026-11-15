@@ -20,9 +20,17 @@ trusting a bad CRC each make the suite fail.
 ## What is written but NOT built or run (needs ESP-IDF and a device)
 `main/app_main.cpp` (tasks), `actuators` (GPIO + independent hard ON cap), `sensors` (only the level input;
 other sensors report `missing`), `mqtt_client/src/net.c` (esp-mqtt, LWT, per-connection nonce, backoff+jitter),
-`config_store_nvs.c`, `journal_littlefs.c` (note: uses the SPIFFS API on a `spiffs`-type partition; **rebuilding the
-journal index after a reboot is not implemented**), Wi-Fi bring-up and provisioning (not written: needs decisions
-about how credentials get onto the device). No OTA (out of MVP scope).
+`config_store_nvs.c`, `journal_littlefs.c` (uses the SPIFFS API on a `spiffs`-type partition; the journal index is
+rebuilt from flash after a reboot), `main/setup_portal.c` (first-time setup page on the controller's own Wi-Fi +
+farm Wi-Fi bring-up with backoff; see docs/architecture/fleet-management.md). All of it compiles with ESP-IDF
+v5.3; none of it has run on a device. No OTA (out of MVP scope).
+
+## First-time setup (no technician)
+An unconfigured controller opens the Wi-Fi network `AeroLab-Setup-XXXX` and serves a page at
+`http://192.168.4.1`: farm Wi-Fi name + password and the setup code from the Pi dashboard (*Add a unit*).
+The code is decoded by `components/protocol/src/setup_code.c` (host-tested). Set
+`CONFIG_AEROLAB_SETUP_AP_PASSWORD` for production builds; empty means an OPEN setup network (bench only).
+Re-entering setup on a configured controller needs a physical trigger that depends on the board (not done).
 
 ## Before energising anything (blocking facts only the project owner can supply, spec §22)
 1. ESP32 model/flash size; pump relay polarity and power; reservoir level input polarity.
