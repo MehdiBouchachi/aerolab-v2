@@ -2,7 +2,10 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 
 	sc "github.com/mehdibouchachi/aerolab-v2/contracts/sync"
 	"github.com/mehdibouchachi/aerolab-v2/services/edge-api/internal/storage"
@@ -17,10 +20,9 @@ func (s *Server) Snapshot(ctx context.Context) (sc.State, error) {
 	if err != nil {
 		return st, err
 	}
-	type row struct{ id, name, dev string }
-	var rs []row
+	var rs []unitRef
 	for rows.Next() {
-		var r row
+		var r unitRef
 		if rows.Scan(&r.id, &r.name, &r.dev) == nil {
 			rs = append(rs, r)
 		}
@@ -30,13 +32,26 @@ func (s *Server) Snapshot(ctx context.Context) (sc.State, error) {
 	if len(rs) > 200 {
 		rs = rs[:200] // bounded payload; the cloud is told the list is partial
 	}
-	for _, r := range rs {
-		v, err := s.buildUnit(ctx, r.id, r.name, r.dev, true)
-		if err != nil {
-			return st, err
-		}
+	views, err := s.buildUnits(ctx, rs, true)
+	if err != nil {
+		return st, err
+	}
+	h := sha256.New()
+	fmt.Fprintf(h, "%v|%v|%s|", st.Connectivity.MQTTBrokerConnected, st.UnitsComplete, st.SiteName)
+	for _, v := range views {
 		b, _ := json.Marshal(v)
 		st.Units = append(st.Units, b)
+		// fingerprint the same view with the per-second age zeroed: only real changes count
+		if v.LatestReadings != nil {
+			age := v.LatestReadings.AgeSeconds
+			v.LatestReadings.AgeSeconds = 0
+			fb, _ := json.Marshal(v)
+			v.LatestReadings.AgeSeconds = age
+			h.Write(fb)
+		} else {
+			h.Write(b)
+		}
 	}
+	st.Fingerprint = hex.EncodeToString(h.Sum(nil))
 	return st, nil
 }

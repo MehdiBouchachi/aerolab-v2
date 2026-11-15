@@ -69,6 +69,9 @@ type State struct {
 	// UnitsComplete: Units is the FULL list of the site's units, so the cloud may drop units that are
 	// absent. False (or missing, e.g. an older edge) means "partial": the cloud then deletes nothing.
 	UnitsComplete bool `json:"units_complete"`
+	// Fingerprint (never sent) identifies the meaningful content, ignoring clock-driven fields such as a
+	// reading's age, so the edge can skip re-uploading an unchanged snapshot.
+	Fingerprint string `json:"-"`
 }
 
 type Connectivity struct {

@@ -568,3 +568,22 @@ func TestIdentityAndPairingEndpointsEndToEnd(t *testing.T) {
 		t.Fatalf("code reused: %d", w.Code)
 	}
 }
+
+func TestSnapshotFingerprintIgnoresReadingAgeButSeesRealChanges(t *testing.T) {
+	e := newEnv(t)
+	insertTel(t, e, 1, time.Now().Add(-20*time.Second), `{"ph":{"value":6.1,"quality":"valid"}}`, "DEVICE_CLOCK")
+	a, _ := e.srv.Snapshot(context.Background())
+	time.Sleep(1100 * time.Millisecond) // age_seconds advances
+	b, _ := e.srv.Snapshot(context.Background())
+	if a.Fingerprint == "" || a.Fingerprint != b.Fingerprint {
+		t.Fatal("the passage of time alone changed the fingerprint")
+	}
+	if string(a.Units[0]) == string(b.Units[0]) {
+		t.Fatal("test premise: the payload's age should differ")
+	}
+	insertTel(t, e, 2, time.Now(), `{"ph":{"value":5.2,"quality":"valid"}}`, "DEVICE_CLOCK")
+	c, _ := e.srv.Snapshot(context.Background())
+	if c.Fingerprint == b.Fingerprint {
+		t.Fatal("a new reading did not change the fingerprint")
+	}
+}

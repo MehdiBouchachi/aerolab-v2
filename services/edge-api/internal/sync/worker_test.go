@@ -367,3 +367,42 @@ func TestRemoteIntentAppliedOnlyAfterControllerConfirms(t *testing.T) {
 		t.Fatalf("APPLIED reported %d times", n)
 	}
 }
+
+func TestUnchangedStateIsNotReUploadedEveryCycle(t *testing.T) {
+	r := newRig(t, false)
+	fp := "fp-1"
+	r.w.state = func(context.Context) (sc.State, error) {
+		return sc.State{ObservedAt: storage.Now(), Fingerprint: fp}, nil
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := r.w.cycle(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b, _ := r.f.take()
+	if len(b) != 3 || b[0].State == nil || b[1].State != nil || b[2].State != nil {
+		t.Fatalf("an unchanged state must be sent once, then omitted (batches still sent as heartbeats): %v %v %v", b[0].State != nil, b[1].State != nil, b[2].State != nil)
+	}
+	fp = "fp-2" // something real changed
+	_, _ = r.w.cycle(context.Background())
+	if b, _ = r.f.take(); b[3].State == nil {
+		t.Fatal("a changed state was not sent")
+	}
+	r.w.lastSentAt = time.Now().Add(-StateResend) // due for the periodic resend
+	_, _ = r.w.cycle(context.Background())
+	if b, _ = r.f.take(); b[4].State == nil {
+		t.Fatal("periodic resend missing")
+	}
+	// after a failed upload the next success carries the state again even if unchanged
+	r.f.mu.Lock()
+	r.f.down = true
+	r.f.mu.Unlock()
+	_, _ = r.w.cycle(context.Background())
+	r.f.mu.Lock()
+	r.f.down = false
+	r.f.mu.Unlock()
+	_, _ = r.w.cycle(context.Background())
+	if b, _ = r.f.take(); b[len(b)-1].State == nil {
+		t.Fatal("state not re-sent after a failure")
+	}
+}
