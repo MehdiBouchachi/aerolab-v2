@@ -7,7 +7,7 @@ keep a copy at the repo root). This README says what actually exists today.
 
 > **Current state: Phases 1-5 implemented to the extent stated below; NOTHING has run on a Raspberry Pi, an ESP32 or a phone.**
 > Backend, cloud and the web UI are tested end to end on a development machine with a real Mosquitto and PostgreSQL.
-> Firmware logic is tested on the host (the ESP-IDF glue is unbuilt). The mobile app's logic is tested; its UI is only typechecked. Nothing here has run on a Raspberry Pi
+> Firmware logic is tested on the host (the ESP-IDF image compiles but has never been flashed). The mobile app's logic is tested; its UI is only typechecked. Nothing here has run on a Raspberry Pi
 > or an ESP32. See [`docs/development/status.md`](docs/development/status.md) for the honest checklist.
 
 ## Status by phase
@@ -15,7 +15,7 @@ keep a copy at the repo root). This README says what actually exists today.
 |---|---|
 | 1 Edge + simulator + contracts | ✅ tested (unit, race, real-broker integration, load on x86) |
 | 2 Web dashboard (local) | ✅ screens listed in `apps/web/README.md`; crop/harvest/export **not built** |
-| 3 ESP32 firmware | 🟡 portable core tested on host (gcc + ASan/UBSan); ESP-IDF glue **never built**; outputs disabled until wiring is verified |
+| 3 ESP32 firmware | 🟡 portable core tested on host (gcc + ASan/UBSan); ESP-IDF image compiles (v5.3, CI) but **never flashed**; outputs disabled until wiring is verified |
 | 4 Cloud API + sync | ✅ tested against real PostgreSQL + a real Pi-side worker, incl. WAN loss/recovery and remote requests; not deployed anywhere |
 | 5 Mobile | 🟡 logic tested incl. against a real edge; UI typechecked only, never run on a device |
 | 6 Hardening/ops | ⛔ not done: no Pi install test, no 24 h soak, no TLS, no backups/restore |

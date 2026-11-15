@@ -45,7 +45,7 @@ Legend: ✅ done and tested here · 🟡 done, partially verified · ⛔ not sta
 | Cloud shows STALE when the Pi stops syncing | ✅ | end-to-end + browser check |
 | Same web app on the cloud origin (`VITE_SOURCE=cloud`) | ✅ | driven in headless Chromium |
 | Firmware portable core | ✅ host | 697 checks, ASan/UBSan, fixture parity with Go, power-cut simulation, 3 safety mutants caught |
-| Firmware ESP-IDF glue | ⛔ unbuilt | needs ESP-IDF + device |
+| Firmware ESP-IDF glue | 🟡 compiles + links (ESP-IDF v5.3, CI `firmware/idf-build`), never flashed; 4 MB flash assumed | needs a device |
 | Site identity (Ed25519) + pairing codes on the Pi | ✅ | Go tests + cross-language vector |
 | Mobile logic (pairing parse, identity, decision table, cache/source isolation) | ✅ | 34 tests incl. real-edge e2e |
 | Mobile UI / device adapters | 🟡 typechecked only | never run |
