@@ -1,7 +1,7 @@
 /*
  * AeroLab ESP32 controller - application entry.
  *
- * STATUS: ESP-IDF 5.x code that has NEVER been compiled or flashed in this repository. The portable
+ * STATUS: compiles and links with ESP-IDF v5.3 (CI job firmware/idf-build); NEVER flashed or run. The portable
  * logic it calls (controller, safety, protocol, journal, config store, command handler) is compiled and
  * tested on the host (firmware/esp32/test/host).
  *

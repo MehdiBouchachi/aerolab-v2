@@ -1,7 +1,8 @@
 # ESP32 firmware (ESP-IDF)
 
-**Status: portable core TESTED ON THE HOST; ESP-IDF glue WRITTEN BUT NEVER BUILT; nothing has run on an ESP32.**
-No ESP-IDF toolchain was available while this was written, so `idf.py build` has not been run. Do not flash
+**Status: portable core TESTED ON THE HOST; full image COMPILES AND LINKS with ESP-IDF v5.3 (target esp32, no
+warnings in our code, checked in CI); nothing has been flashed or run on an ESP32.** The build assumes 4 MB flash
+(`sdkconfig.defaults`); that is not a verified hardware fact. Do not flash
 this to hardware connected to a pump without the steps in "Before energising anything".
 
 ## What is real and tested (`make fw-test`, plain gcc, strict warnings + AddressSanitizer/UBSan)
