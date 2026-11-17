@@ -202,7 +202,7 @@ func (a *App) seedProvisioned(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+	return a.seedTestCropProfile(ctx) // simulated site only: a clearly labelled TEST tomato profile
 }
 
 // Run starts all workers and blocks until ctx is cancelled, then shuts down
