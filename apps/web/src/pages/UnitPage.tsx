@@ -7,7 +7,7 @@ import { Badge, Empty, ErrorNote, Loading, Sim } from '../components/ui'
 import { HistoryCompare } from '../components/HistoryCompare'
 import { ProgramEditor } from './ProgramEditor'
 import { useApp } from '../app/context'
-import { HOME, IS_CLOUD, P } from '../api/paths'
+import { HOME, P } from '../api/paths'
 
 const UnitSettings = lazy(() => import('./UnitSettings').then(m => ({ default: m.UnitSettings })))
 
@@ -18,7 +18,7 @@ export function UnitPage() {
   const { unitId = '' } = useParams()
   const [searchParams] = useSearchParams()
   const q = searchParams.get('tab')
-  const tab = q === 'history' ? 'history' : q === 'programme' ? 'programme' : q === 'settings' && !IS_CLOUD ? 'settings' : 'overview'
+  const tab = q === 'history' ? 'history' : q === 'programme' ? 'programme' : q === 'settings' ? 'settings' : 'overview'
   useEffect(() => { window.scrollTo(0, 0) }, [tab])
   const { session } = useApp()
   const site = session!.site!.id
@@ -33,7 +33,7 @@ export function UnitPage() {
   const inc = useFetch<{ incidents: Incident[] }>(`/api/v1/sites/${site}/incidents?unit_id=${unitId}&state=active`, ['incident.updated'])
   // crop ranges live on the Pi (offline-first); the cloud copy shows only which crop is assigned
   const profileId = u.data?.unit.crop?.profile_id
-  const crop = useFetch<CropProfile>(!IS_CLOUD && profileId ? `/api/v1/crop-profiles/${profileId}` : null, ['crop_profile.updated'], 0)
+  const crop = useFetch<CropProfile>(profileId ? P.site(site, `/api/v1/crop-profiles/${profileId}`) : null, ['crop_profile.updated'], 0)
   const ranges = crop.data && Object.keys(crop.data.thresholds).length ? crop.data.thresholds : null
   const nav = useNavigate()
 
@@ -46,7 +46,7 @@ export function UnitPage() {
       <div className="unit-page-heading"><Link className="back-link" to={HOME}>← Overview</Link><div className="unit-page-title"><div><h1>{unit.name.replace(/\s*\(SIMULATED\)$/i, '')}</h1>{unit.is_simulated && <Sim />}</div><Badge tone={st.tone}>{st.text}</Badge></div>
         <p className="muted unit-crop">{unit.crop ? <>Growing <b>{unit.crop.crop}</b>{unit.crop.variety && ` (${unit.crop.variety})`} · profile “{unit.crop.profile_name}”</> : 'No crop profile assigned: no crop-specific alerts.'}</p></div>
       <ErrorNote error={u.error} retry={u.reload} />
-      <nav className="unit-tabs" aria-label="Unit sections"><Link to="?tab=overview" aria-current={tab === 'overview' ? 'page' : undefined}>Overview</Link><Link to="?tab=history" aria-current={tab === 'history' ? 'page' : undefined}>History</Link><Link to="?tab=programme" aria-current={tab === 'programme' ? 'page' : undefined}>Programme</Link>{!IS_CLOUD && <Link to="?tab=settings" aria-current={tab === 'settings' ? 'page' : undefined}>Settings</Link>}</nav>
+      <nav className="unit-tabs" aria-label="Unit sections"><Link to="?tab=overview" aria-current={tab === 'overview' ? 'page' : undefined}>Overview</Link><Link to="?tab=history" aria-current={tab === 'history' ? 'page' : undefined}>History</Link><Link to="?tab=programme" aria-current={tab === 'programme' ? 'page' : undefined}>Programme</Link><Link to="?tab=settings" aria-current={tab === 'settings' ? 'page' : undefined}>Settings</Link></nav>
       {tab === 'overview' && <>
       <section className="panel unit-status" aria-label="Controller status">
         <h2>Controller status</h2>

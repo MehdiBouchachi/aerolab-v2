@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { api, ApiError } from '../api/client'
 import { useApp } from '../app/context'
 import { useFetch } from '../app/hooks'
+import { P } from '../api/paths'
 import type { CropProfile, Range } from '../api/types'
 import { label, SENSOR_LABEL } from '../app/format'
 import { Empty, ErrorNote, Loading } from '../components/ui'
@@ -80,8 +81,8 @@ function Editor({ initial, onDone, onCancel }: { initial: CropProfile | null; on
     if (Object.keys(errs).length) return
     setBusy(true); setErr(null)
     try {
-      if (initial) await api('PUT', `/api/v1/crop-profiles/${initial.id}`, { expected_version: initial.version, ...toBody(f) })
-      else await api('POST', `/api/v1/sites/${site}/crop-profiles`, toBody(f))
+      if (initial) await api('PUT', P.site(site, `/api/v1/crop-profiles/${initial.id}`), { expected_version: initial.version, ...toBody(f) })
+      else await api('POST', P.site(site, `/api/v1/sites/${site}/crop-profiles`), toBody(f))
       onDone()
     } catch (x) { setErr(x as ApiError) } finally { setBusy(false) }
   }
@@ -130,14 +131,14 @@ function Editor({ initial, onDone, onCancel }: { initial: CropProfile | null; on
 
 export function Crops() {
   const { session, can } = useApp(); const site = session!.site!.id
-  const list = useFetch<{ items: CropProfile[] }>(`/api/v1/sites/${site}/crop-profiles`, ['crop_profile.updated', 'unit.updated'])
+  const list = useFetch<{ items: CropProfile[] }>(P.site(site, `/api/v1/sites/${site}/crop-profiles`), ['crop_profile.updated', 'unit.updated'])
   const [editing, setEditing] = useState<CropProfile | 'new' | null>(null)
   const [err, setErr] = useState<ApiError | null>(null)
   const edit = can('edit_program')
   const archive = async (p: CropProfile) => {
     if (!window.confirm(`Archive the crop profile “${p.name}”? Units keep their history.`)) return
     setErr(null)
-    try { await api('DELETE', `/api/v1/crop-profiles/${p.id}`); list.reload() } catch (x) { setErr(x as ApiError) }
+    try { await api('DELETE', P.site(site, `/api/v1/crop-profiles/${p.id}`)); list.reload() } catch (x) { setErr(x as ApiError) }
   }
   return (
     <>

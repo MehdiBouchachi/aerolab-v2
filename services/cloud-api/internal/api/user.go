@@ -18,6 +18,9 @@ import (
 
 func (s *Server) register() {
 	s.registerFleet()
+	s.registerRelay()
+	// meta tells the one dashboard build which server it was loaded from (no build-time switch).
+	s.handle("GET", "/api/v1/meta", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"origin": "cloud"}) })
 	s.handle("GET", "/healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
 	s.handle("GET", "/readyz", func(w http.ResponseWriter, r *http.Request) {
 		ok := s.DB.PingContext(r.Context()) == nil
@@ -130,10 +133,12 @@ func (s *Server) visibleSites(ctx context.Context, userID string) ([]siteRow, er
 }
 
 var capsByRole = map[auth.Role][]string{
-	// only what the cloud API really implements (no remote acknowledge / crop entry yet)
+	// The site actions mirror the Pi's role matrix: they reach the Pi through the relay, and the Pi
+	// enforces every one of them again with the same role. manage_members/manage_users mean the site's
+	// cloud members here (local Pi accounts carry passwords and are never managed through the cloud).
 	auth.Viewer:   {"view_data"},
-	auth.Operator: {"view_data"},
-	auth.Admin:    {"view_data", "edit_program", "manage_members"},
+	auth.Operator: {"view_data", "ack_incident", "record_crop"},
+	auth.Admin:    {"view_data", "ack_incident", "record_crop", "edit_program", "manage_devices", "view_audit", "view_diagnostics", "manage_members", "manage_users"},
 }
 
 func (s *Server) session(w http.ResponseWriter, r *http.Request, u auth.User) {

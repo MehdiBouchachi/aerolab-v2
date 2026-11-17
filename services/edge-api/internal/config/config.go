@@ -56,6 +56,11 @@ type Config struct {
 	// Default OFF: a site must opt in locally. Even when on, the Pi revalidates
 	// and the ESP32 confirms; manual pump tests are never accepted remotely.
 	RemotePrograms bool
+	// RemoteManagement: let the cloud-served dashboard use this Pi's site features (crop profiles, adding
+	// and renaming units, alerts, storage...) through the relay. Default ON once the Pi is connected to a
+	// cloud; the Pi re-checks every call against its allow-list and the member's role. Local accounts,
+	// pairing and the cloud link are never reachable remotely. Set AEROLAB_REMOTE_MANAGEMENT=false to stop it.
+	RemoteManagement bool
 
 	BootstrapAdminUser     string
 	BootstrapAdminPassword string
@@ -123,6 +128,7 @@ func Load() (*Config, error) {
 	c.CloudURL, c.CloudToken = env("AEROLAB_CLOUD_URL", ""), env("AEROLAB_CLOUD_TOKEN", "")
 	c.CloudAllowInsecure = envBool("AEROLAB_CLOUD_ALLOW_INSECURE", false)
 	c.RemotePrograms = envBool("AEROLAB_REMOTE_PROGRAMS", false)
+	c.RemoteManagement = envBool("AEROLAB_REMOTE_MANAGEMENT", true)
 	if c.CloudSyncInterval, err = envDur("AEROLAB_CLOUD_SYNC_INTERVAL", 5*time.Second); err != nil {
 		return nil, err
 	}

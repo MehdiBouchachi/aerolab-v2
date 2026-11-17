@@ -6,7 +6,7 @@ import { useApp } from '../app/context'
 import { useFetch } from '../app/hooks'
 import type { CropProfile, SetupBundle } from '../api/types'
 import { ErrorNote } from '../components/ui'
-import { HOME } from '../api/paths'
+import { HOME, P } from '../api/paths'
 
 /** Shows a controller setup code exactly once, as QR + text, with what to do next. */
 export function SetupCode({ b }: { b: SetupBundle }) {
@@ -35,7 +35,7 @@ export function SetupCode({ b }: { b: SetupBundle }) {
 
 export function AddUnit() {
   const { session, can } = useApp(); const site = session!.site!.id
-  const crops = useFetch<{ items: CropProfile[] }>(`/api/v1/sites/${site}/crop-profiles`, [], 0)
+  const crops = useFetch<{ items: CropProfile[] }>(P.site(site, `/api/v1/sites/${site}/crop-profiles`), [], 0)
   const [name, setName] = useState('')
   const [crop, setCrop] = useState('')
   const [touched, setTouched] = useState(false)
@@ -47,7 +47,7 @@ export function AddUnit() {
     e.preventDefault(); setTouched(true)
     if (!name.trim()) return
     setBusy(true); setErr(null)
-    try { setDone(await api<SetupBundle>('POST', `/api/v1/sites/${site}/units`, { name: name.trim(), ...(crop ? { crop_profile_id: crop } : {}) })) } catch (x) { setErr(x as ApiError) } finally { setBusy(false) }
+    try { setDone(await api<SetupBundle>('POST', P.site(site, `/api/v1/sites/${site}/units`), { name: name.trim(), ...(crop ? { crop_profile_id: crop } : {}) })) } catch (x) { setErr(x as ApiError) } finally { setBusy(false) }
   }
   return (
     <>

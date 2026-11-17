@@ -1,8 +1,10 @@
 import type { CommandStatus, Quality, Unit } from '../api/types'
 
 export function ago(iso: string | null | undefined, now = Date.now()): string {
-  if (!iso) return 'never'
-  const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000))
+  const t = iso ? Date.parse(iso) : NaN
+  // A server's "zero time" (year 0001, e.g. a site that has never synced) means no data, not 739,000 days.
+  if (!Number.isFinite(t) || t < Date.UTC(2000, 0, 1)) return 'never'
+  const s = Math.max(0, Math.round((now - t) / 1000))
   if (s < 5) return 'just now'
   if (s < 90) return `${s} s ago`
   if (s < 5400) return `${Math.round(s / 60)} min ago`

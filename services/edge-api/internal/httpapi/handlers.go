@@ -33,6 +33,10 @@ func (s *Server) register() {
 	s.handle("GET", "/readyz", s.readyz)
 	s.handle("POST", "/api/v1/local/auth/login", s.login)
 	s.handle("GET", "/api/v1/identity", s.identity)
+	// meta tells the one dashboard build which server it was loaded from (no build-time switch).
+	s.handle("GET", "/api/v1/meta", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]string{"origin": "edge", "site_id": s.Cfg.SiteID})
+	})
 	s.handle("POST", "/api/v1/site-pairing/confirm", s.pairConfirm)
 
 	// ---- session & identity

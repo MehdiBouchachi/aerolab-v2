@@ -5,7 +5,6 @@ import type { Incident, Summary, Unit } from '../api/types'
 import { ago, label, showReading, unitStatus } from '../app/format'
 import { Badge, Empty, ErrorNote, Loading, Sim } from '../components/ui'
 import { Icon } from '../components/Icon'
-import { IS_CLOUD } from '../api/paths'
 
 const KEYS = ['water_temp_c', 'ph', 'ec_ms_cm', 'reservoir_level_ok']
 // Phone cards show the four readings in one row, so they need short names.
@@ -27,9 +26,9 @@ export function Overview() {
       <div className={`tile ${s.active_incidents.critical ? 'crit' : ''}`}><b>{s.active_incidents.critical}</b><span>Critical alerts</span></div>
     </section>}
     {inc.data && inc.data.incidents.length > 0 && <section aria-label="Active alerts"><h2>Active alerts</h2><ul className="alerts">{inc.data.incidents.slice(0, 5).map(i => <li key={i.id} className={i.severity}><Badge tone={i.severity === 'critical' ? 'crit' : 'warn'}>{i.severity}</Badge> <b>{i.title}</b> — <Link to={`/units/${i.unit_id}`}>{i.unit_id}</Link><div className="muted">{i.suggested_action}</div></li>)}</ul><Link to="/incidents">All alerts →</Link></section>}
-    <div className="section-heading"><h2>Growing units</h2><span className="muted small">{units.data ? `${units.data.units.length} units` : 'Loading units'}</span>{!IS_CLOUD && can('manage_devices') && <Link className="btn" to="/units/new">Add a unit</Link>}</div>
+    <div className="section-heading"><h2>Growing units</h2><span className="muted small">{units.data ? `${units.data.units.length} units` : 'Loading units'}</span>{can('manage_devices') && <Link className="btn" to="/units/new">Add a unit</Link>}</div>
     {units.loading && <Loading what="units" />}
-    {units.data && units.data.units.length === 0 && <Empty>No units yet.{!IS_CLOUD && can('manage_devices') ? ' Use “Add a unit” to connect your first controller.' : ' An administrator can add them.'}</Empty>}
+    {units.data && units.data.units.length === 0 && <Empty>No units yet.{can('manage_devices') ? ' Use “Add a unit” to connect your first controller.' : ' An administrator can add them.'}</Empty>}
     <div className="cards">{units.data?.units.map(u => {
       const st = unitStatus(u); const r = u.latest_readings
       return <article key={u.id} className={`card ${st.tone}`}>

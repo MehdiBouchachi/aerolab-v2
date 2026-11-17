@@ -7,25 +7,28 @@ import type { LinkInfo, Role, StorageInfo } from '../api/types'
 import { bytes, clock } from '../app/format'
 import { ErrorNote, Loading } from '../components/ui'
 import { Icon } from '../components/Icon'
-import { IS_CLOUD } from '../api/paths'
+import { IS_CLOUD, P } from '../api/paths'
 import QRCode from 'qrcode'
 
 interface U { id: string; username: string; role: Role; disabled: boolean }
+interface Member { user_id: string; email: string; role: Role }
 
 export function Admin() {
   const { session, can } = useApp()
   const site = session!.site!.id
-  const users = useFetch<{ users: U[] }>('/api/v1/local/users', [], 0)
-  const storage = useFetch<StorageInfo>(`/api/v1/sites/${site}/storage`, ['site.cloud_link'], 15000)
-  const devs = useFetch<{ devices: { device_id: string; unit_id: string; data_source: string; connection: string }[] }>(`/api/v1/sites/${site}/devices`, ['unit.state'])
-  const audit = useFetch<{ events: { id: string; actor_id: string; action: string; target_type: string; occurred_at: string }[] }>(`/api/v1/sites/${site}/audit?limit=20`, [], 20000)
   const [err, setErr] = useState<ApiError | null>(null)
   const [nu, setNu] = useState({ username: '', password: '', role: 'VIEWER' as Role })
   const [userErrors, setUserErrors] = useState<{ username?: string; password?: string }>({})
   const [pair, setPair] = useState<{ code: string; expires: string; payload: string; qr: string } | null>(null)
   const [searchParams] = useSearchParams()
   const requested = searchParams.get('view')
-  const view = requested === 'controllers' || requested === 'users' || requested === 'activity' || ((requested === 'pairing' || requested === 'cloud') && !IS_CLOUD) ? requested : 'storage'
+  const view = requested === 'controllers' || requested === 'users' || requested === 'activity' || requested === 'pairing' || (requested === 'cloud' && !IS_CLOUD) ? requested : 'storage'
+  // Only the open tab is fetched. Site data comes from the Pi, directly or through the cloud relay.
+  const users = useFetch<{ users: U[] }>(!IS_CLOUD && view === 'users' ? '/api/v1/local/users' : null, [], 0)
+  const members = useFetch<{ members: Member[] }>(IS_CLOUD && view === 'users' ? `/api/v1/sites/${site}/members` : null, [], 0)
+  const storage = useFetch<StorageInfo>(view === 'storage' ? P.site(site, `/api/v1/sites/${site}/storage`) : null, ['site.cloud_link'], 15000)
+  const devs = useFetch<{ devices: { device_id: string; unit_id: string; data_source: string; connection: string }[] }>(view === 'controllers' ? P.site(site, `/api/v1/sites/${site}/devices`) : null, ['unit.state'])
+  const audit = useFetch<{ events: { id: string; actor_id: string; action: string; target_type: string; occurred_at: string }[] }>(view === 'activity' ? P.site(site, `/api/v1/sites/${site}/audit?limit=20`) : null, [], 20000)
   const [userQuery, setUserQuery] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [busyUser, setBusyUser] = useState<string | null>(null)
@@ -56,6 +59,12 @@ export function Admin() {
     catch (x) { setErr(x as ApiError) }
     finally { setBusyUser(null) }
   }
+  const setMember = async (id: string, role: Role | null) => {
+    setErr(null); setBusyUser(id)
+    try { await api(role ? 'PUT' : 'DELETE', `/api/v1/sites/${site}/members/${id}`, role ? { role } : undefined); members.reload() }
+    catch (x) { setErr(x as ApiError) }
+    finally { setBusyUser(null) }
+  }
   const s = storage.data
   const storageTone = s?.status === 'OK' && s.durable_receipts_enabled ? 'normal' : 'problem'
   const visibleUsers = users.data?.users.filter(u => u.username.toLowerCase().includes(userQuery.trim().toLowerCase())) ?? []
@@ -71,7 +80,7 @@ export function Admin() {
         <Link to="?view=controllers" aria-current={view === 'controllers' ? 'page' : undefined}>Controllers</Link>
         <Link to="?view=users" aria-current={view === 'users' ? 'page' : undefined}>Users</Link>
         {!IS_CLOUD && <Link to="?view=cloud" aria-current={view === 'cloud' ? 'page' : undefined}>Cloud connection</Link>}
-        {!IS_CLOUD && <Link to="?view=pairing" aria-current={view === 'pairing' ? 'page' : undefined}>Phone pairing</Link>}
+        <Link to="?view=pairing" aria-current={view === 'pairing' ? 'page' : undefined}>Phone pairing</Link>
         <Link to="?view=activity" aria-current={view === 'activity' ? 'page' : undefined}>Activity</Link>
       </nav>
       <ErrorNote error={err} />
@@ -105,7 +114,20 @@ export function Admin() {
         </tbody></table>{devs.data.devices.length === 0 && <p className="admin-table-empty">No controllers registered.</p>}</div>}
       </section>}
 
-      {view === 'users' && <section className="admin-section">
+      {IS_CLOUD && view === 'users' && <section className="admin-section">
+        <div className="admin-section-head"><div><h2>Users</h2><p className="admin-section-description">People who can open this site from the cloud. Accounts on the Pi itself are managed on site, because they carry passwords.</p></div>{members.data && <span>{members.data.members.length} members</span>}</div>
+        <ErrorNote error={members.error} retry={members.reload} />
+        {members.loading && <Loading what="members" />}
+        {members.data && <div className="admin-table-wrap"><table className="admin-table accounts-table"><thead><tr><th>User</th><th>Role</th><th><span className="sr-only">Action</span></th></tr></thead><tbody>
+          {members.data.members.map(m => <tr key={m.user_id}>
+            <td data-label="User" className="admin-strong">{m.email}</td>
+            <td data-label="Role"><select aria-label={`Role of ${m.email}`} value={m.role} disabled={busyUser === m.user_id || m.user_id === session?.user?.id} onChange={e => void setMember(m.user_id, e.target.value as Role)}>{(['ADMIN', 'OPERATOR', 'VIEWER'] as Role[]).map(r => <option key={r}>{r}</option>)}</select></td>
+            <td data-label="Action">{m.user_id !== session?.user?.id && <button type="button" className="danger" disabled={busyUser === m.user_id} onClick={() => { if (window.confirm(`Remove ${m.email} from this site?`)) void setMember(m.user_id, null) }}>Remove {m.email}</button>}</td>
+          </tr>)}
+        </tbody></table>{members.data.members.length === 0 && <p className="admin-table-empty">No members.</p>}</div>}
+      </section>}
+
+      {!IS_CLOUD && view === 'users' && <section className="admin-section">
         <div className="admin-section-head"><div><h2>Users</h2><p className="admin-section-description">Manage local access to this site.</p></div>{users.data && <span>{users.data.users.length} accounts</span>}</div>
         <ErrorNote error={users.error} retry={users.reload} />
         {users.loading && <Loading what="accounts" />}
@@ -134,12 +156,12 @@ export function Admin() {
 
       {!IS_CLOUD && view === 'cloud' && <section className="admin-section"><CloudLink /></section>}
 
-      {!IS_CLOUD && view === 'pairing' && <section className="admin-section">
+      {view === 'pairing' && <section className="admin-section">
         <div className="admin-section-head"><h2>Phone pairing</h2></div>
-        <div className="admin-surface admin-pairing">
+        {IS_CLOUD ? <div className="admin-surface admin-pairing"><div><h3>Done on site</h3><p>A pairing code hands a phone the keys to talk to this Pi directly, so it is only shown by the Pi's own dashboard. On the farm network, open the Pi's address, then Administration › Phone pairing. Away from the farm, the phone app can sign in to the cloud instead.</p></div></div> : <div className="admin-surface admin-pairing">
           <div><h3>Connect the AeroLab app</h3><p>Join the site Wi-Fi, then scan a one-time code in the app. The code expires after 5 minutes; sign in with a site account afterward.</p><button type="button" className="secondary" onClick={() => void startPairing()}>Show pairing code</button></div>
           {pair && <div className="admin-pair-code"><img src={pair.qr} alt={`Pairing QR code ${pair.code}`} width={280} height={280} /><p>Code <strong>{pair.code}</strong> · expires {new Date(pair.expires).toLocaleTimeString()}</p><details><summary>Manual pairing text</summary><textarea className="pairing-text resize-none" readOnly rows={4} value={pair.payload} aria-label="Pairing text" /></details></div>}
-        </div>
+        </div>}
       </section>}
 
       {view === 'activity' && <section className="admin-section">
