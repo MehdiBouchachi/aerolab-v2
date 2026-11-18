@@ -79,7 +79,10 @@ func TestRelayIsOnlyForMembersAndOnlyToTheirSite(t *testing.T) {
 	}
 	// site B's Pi never receives site A's request
 	done := make(chan struct{})
-	go func() { e.do("GET", "/api/v1/sites/site-a-0001/edge/sites/site-a-0001/storage", e.tok["a@x.test"], nil); close(done) }()
+	go func() {
+		e.do("GET", "/api/v1/sites/site-a-0001/edge/sites/site-a-0001/storage", e.tok["a@x.test"], nil)
+		close(done)
+	}()
 	time.Sleep(300 * time.Millisecond)
 	if w := e.do("GET", "/api/v1/edge/relay/next", e.edge["site-b-0001"], nil); w.Code != 204 {
 		t.Fatalf("site B got another site's request: %d %s", w.Code, w.Body)
