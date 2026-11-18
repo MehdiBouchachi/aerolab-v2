@@ -31,9 +31,9 @@ export function Shell() {
       </details>
       <nav aria-label="Main">
         {IS_CLOUD && <NavLink to="/" end><Icon name="units" /><span className="nav-label-desktop">All farms</span><span className="nav-label-mobile">Farms</span></NavLink>}
-        <NavLink to={HOME} end className={({ isActive }) => isActive || location.pathname.startsWith('/units/') ? 'active' : ''}><Icon name="overview" /> {IS_CLOUD ? 'This Pi' : 'Overview'}</NavLink>
+        <NavLink to={HOME} end className={({ isActive }) => isActive || location.pathname.startsWith('/units/') ? 'active' : ''}><Icon name="overview" /> {IS_CLOUD ? (session?.site?.name ?? 'Farm overview') : 'Overview'}</NavLink>
         <NavLink to="/incidents"><Icon name="alerts" /> Alerts{s && s.active_incidents.total > 0 ? <span className="count">{s.active_incidents.total}</span> : null}</NavLink>
-        {!IS_CLOUD && <NavLink to="/crops"><Icon name="beaker" /><span className="nav-label-desktop">Crop profiles</span><span className="nav-label-mobile">Crops</span></NavLink>}
+        {<NavLink to="/crops"><Icon name="beaker" /><span className="nav-label-desktop">Crop profiles</span><span className="nav-label-mobile">Crops</span></NavLink>}
         {can('manage_users') && <NavLink to="/admin"><Icon name="admin" /><span className="nav-label-desktop">Administration</span><span className="nav-label-mobile">Admin</span></NavLink>}
       </nav>
       <div className="who">

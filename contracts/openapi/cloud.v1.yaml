@@ -70,3 +70,15 @@ paths:
     get: { summary: "Edge: unexpired remote intents", x-min-role: EDGE, responses: { '200': { description: ok } } }
   /api/v1/edge/sync/command-results:
     post: { summary: "Edge: report an intent's status", x-min-role: EDGE, responses: { '200': { description: ok } } }
+  /api/v1/meta:
+    get: { summary: "Which server served the dashboard ({origin: cloud}); the one web build picks its API from this", security: [], responses: { '200': { description: ok } } }
+  /api/v1/sites/{siteId}/edge/{path...}:
+    get: &relay { summary: "Relay one site API call to the site's Pi, which runs it through its own handler with the member's role (allow-list on the Pi). 503 SITE_OFFLINE when the Pi is not connected; 504 SITE_UNREACHABLE (not run) or OUTCOME_UNKNOWN", x-min-role: VIEWER, responses: { '200': { description: the Pi's answer, status passed through }, '503': { description: site offline }, '504': { description: not picked up or no answer } } }
+    post: *relay
+    put: *relay
+    patch: *relay
+    delete: *relay
+  /api/v1/edge/relay/next:
+    get: { summary: "Edge: long-poll (up to 10 s) for the next relayed dashboard call", x-min-role: EDGE, responses: { '200': { description: a RelayRequest }, '204': { description: nothing waiting } } }
+  /api/v1/edge/relay/results:
+    post: { summary: "Edge: the answer to a relayed call", x-min-role: EDGE, responses: { '204': { description: stored }, '404': { description: not a claimed request for this site } } }

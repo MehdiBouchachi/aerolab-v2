@@ -142,6 +142,9 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	a.HTTP = httpapi.New(httpapi.Deps{Cfg: cfg, DB: db, Auth: a.Auth, Reg: a.Reg, Cmds: a.Cmds, Hub: a.Hub, Metrics: a.Metrics, Writer: a.Writer, MQTT: a.MQTT, Cloud: cloud, Pairing: a.Pair, Broker: a.Broker, Ranges: a.Ranges, Linker: a, Static: static.FS, Log: log})
 	if a.Sync != nil {
 		a.Sync.SetStateFunc(a.HTTP.Snapshot)
+		if cfg.RemoteManagement {
+			a.Sync.SetRelay(a.HTTP.ServeRelay)
+		}
 	} else if err := a.loadStoredLink(ctx); err != nil {
 		return nil, err
 	}
@@ -199,7 +202,7 @@ func (a *App) seedProvisioned(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+	return a.seedTestCropProfile(ctx) // simulated site only: a clearly labelled TEST tomato profile
 }
 
 // Run starts all workers and blocks until ctx is cancelled, then shuts down

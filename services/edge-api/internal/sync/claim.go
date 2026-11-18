@@ -52,6 +52,10 @@ func Claim(ctx context.Context, cloudURL, code, siteID, siteName, edgeVersion st
 	c := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := c.Do(req)
 	if err != nil {
+		if h := req.URL.Hostname(); h == "localhost" || h == "127.0.0.1" || h == "::1" {
+			// In Docker (and on a real Pi) "localhost" is the Pi itself, not the computer showing the page.
+			return "", "", fmt.Errorf("cannot reach the cloud at %s: from the Pi, \"localhost\" means the Pi itself. Use an address the Pi can reach (in the Docker demo: http://cloud:8090): %w", cloudURL, err)
+		}
 		return "", "", fmt.Errorf("cannot reach the cloud: %w", err)
 	}
 	defer resp.Body.Close()

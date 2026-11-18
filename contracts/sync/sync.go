@@ -187,3 +187,30 @@ func (r *IntentResult) Validate() error {
 	}
 	return nil
 }
+
+// ---------------------------------------------------------------- relay
+//
+// The relay lets the dashboard served by the cloud use the same site features as the dashboard served
+// by the Pi, without the cloud re-implementing them. The cloud forwards one dashboard API call; the Pi
+// checks it against its own allow-list, runs it through its own handler with the cloud member's role,
+// and returns the response. The Pi stays the only authority over its data. Programme changes do NOT use
+// the relay: they keep the intent channel above (version checks, controller confirmation).
+
+// RelayMaxBody bounds both the forwarded request body and the returned response body.
+const RelayMaxBody = 256 << 10
+
+type RelayRequest struct {
+	ID          string          `json:"id"`
+	Method      string          `json:"method"`
+	Path        string          `json:"path"` // site API path incl. query, e.g. /api/v1/crop-profiles/p1
+	Body        json.RawMessage `json:"body,omitempty"`
+	RequestedBy string          `json:"requested_by"` // cloud user's email, for the Pi's audit log
+	Role        string          `json:"role"`         // the user's role at this site (ADMIN/OPERATOR/VIEWER)
+	ExpiresAt   string          `json:"expires_at"`
+}
+
+type RelayResponse struct {
+	ID     string          `json:"id"`
+	Status int             `json:"status"`
+	Body   json.RawMessage `json:"body,omitempty"`
+}

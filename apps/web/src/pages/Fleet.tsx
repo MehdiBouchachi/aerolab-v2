@@ -37,6 +37,7 @@ function ConnectPi({ org }: { org: Org }) {
       {!code ? <button className="primary" onClick={() => void make()}>Connect a Pi to {org.name}</button> : (<>
         <p>Connection code: <b style={{ fontSize: '1.4rem', letterSpacing: '.08em' }}>{code.code}</b></p>
         <p className="muted small">Valid until {new Date(code.expires_at).toLocaleString()} and works once. On the Pi's local dashboard open <b>Administration → Connect to cloud</b>, enter <b>{window.location.origin}</b> and this code. The Pi keeps working on its own whether or not it is connected.</p>
+        {/^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname) && <p className="muted small">This cloud is on your own computer, and “localhost” on the Pi means the Pi itself. In the Docker demo enter <b>http://cloud:8090</b> instead; otherwise use this computer’s network address.</p>}
         <button onClick={() => setCode(null)}>Done</button>
       </>)}
     </div>

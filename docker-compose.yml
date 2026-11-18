@@ -9,6 +9,9 @@ services:
     environment:
       DEVICES: "${DEVICES:-10}"
       AEROLAB_PUBLISHED_PORT: "${AEROLAB_PORT:-8080}"
+      # Demo only: lets the Pi connect to the cloud container over plain HTTP on the private Docker network
+      # (Administration › Cloud connection › address http://cloud:8090). A real Pi must use https://.
+      AEROLAB_CLOUD_ALLOW_INSECURE: "true"
     volumes: ["aerolab-data:/data"]
     mem_limit: 320m
     restart: unless-stopped

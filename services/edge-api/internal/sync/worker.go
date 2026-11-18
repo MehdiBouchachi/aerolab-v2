@@ -60,6 +60,8 @@ type Worker struct {
 	status CloudStatus
 	kick   chan struct{}
 
+	relay RelayFunc // nil: remote dashboard calls are not accepted
+
 	waiting map[string]string // intents being retried (id -> reason), only to log once; bounded below
 
 	// last state snapshot the cloud acknowledged (only touched by the Run goroutine)
@@ -97,6 +99,9 @@ func backoff(base time.Duration, failures int) time.Duration {
 }
 
 func (w *Worker) Run(ctx context.Context) {
+	if w.relay != nil {
+		go w.runRelay(ctx)
+	}
 	failures := 0
 	for {
 		more, err := w.cycle(ctx)

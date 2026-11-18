@@ -248,9 +248,13 @@ func (s *Server) handle(method, pattern string, h http.HandlerFunc) {
 // protected authenticates then authorises. need == "" means any signed-in user.
 func (s *Server) protected(method, pattern string, need roles.Action, h userHandler) {
 	s.handle(method, pattern, func(w http.ResponseWriter, r *http.Request) {
-		u, viaCookie, ok := s.authenticate(w, r)
-		if !ok {
-			return
+		u, viaRelay := relayUser(r)
+		viaCookie := false
+		if !viaRelay {
+			var ok bool
+			if u, viaCookie, ok = s.authenticate(w, r); !ok {
+				return
+			}
 		}
 		if viaCookie && method != http.MethodGet && !csrfOK(r) {
 			writeError(w, r, 403, "FORBIDDEN", "cross-site request refused", nil)

@@ -67,6 +67,8 @@ paths:
     post: { x-surface: edge-only, security: [], summary: Local login, responses: { '200': { description: session }, '401': { description: bad credentials }, '429': { description: rate limited } } }
   /api/v1/identity:
     get: { x-surface: edge-only, security: [], summary: "Signed identity proof for a caller-chosen challenge (Ed25519); lets the phone verify the Pi before sending credentials", responses: { '200': { description: ok }, '400': { description: bad challenge } } }
+  /api/v1/meta:
+    get: { x-surface: shared, security: [], summary: "Which server served the dashboard ({origin: edge|cloud}); the one web build picks its API from this", responses: { '200': { description: ok } } }
   /api/v1/site-pairing/start:
     post: { x-surface: edge-only, x-min-role: ADMIN, summary: "Create a single-use 5-minute pairing code + QR payload (no long-term secret)", responses: { '201': { description: created }, '429': { description: too many unused codes } } }
   /api/v1/site-pairing/confirm:

@@ -23,6 +23,9 @@ func (a *App) startSync(url, token string) {
 	w := edgesync.NewWorker(edgesync.Options{SiteID: a.Cfg.SiteID, URL: url, Token: token, Interval: a.Cfg.CloudSyncInterval,
 		EdgeVersion: "edge-" + Version, RemotePrograms: a.Cfg.RemotePrograms}, a.DB, a.Cmds, nil, a.Log)
 	w.SetStateFunc(a.HTTP.Snapshot)
+	if a.Cfg.RemoteManagement {
+		w.SetRelay(a.HTTP.ServeRelay)
+	}
 	a.Writer.SetSyncOutbox(true)
 	a.Ingest.SetSyncOutbox(true)
 	a.Cmds.SetSyncOutbox(true)

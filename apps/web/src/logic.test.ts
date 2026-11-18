@@ -1,5 +1,6 @@
 import { validateForm } from './pages/Crops'
-import { describe, expect, it } from 'vitest'
+import * as paths from './api/paths'
+import { afterEach, describe, expect, it } from 'vitest'
 import { parseSse } from './api/client'
 import { segments, seriesOf } from './components/Chart'
 import { validateDraft, toProgram } from './pages/ProgramEditor'
@@ -75,6 +76,7 @@ describe('plain-language state', () => {
     const now = Date.parse('2026-11-12T12:00:00Z')
     expect(ago('2026-11-12T11:59:30Z', now)).toBe('30 s ago')
     expect(ago(null)).toBe('never')
+    expect(ago('0001-01-01T00:00:00Z', now)).toBe('never')
   })
 })
 
@@ -94,5 +96,29 @@ describe('crop profile form (client hints only; the Pi re-validates)', () => {
   it('validates an included programme like the programme editor', () => {
     const e = validateForm({ ...base, rows: [], withProgram: true, prog: { on: '10', off: '20', max: '5' } })
     expect(e.prog_max).toMatch(/pump-on/)
+  })
+})
+
+describe('one build for the Pi and the cloud', () => {
+  const meta = (body: unknown, ok = true) => (async () => ({ ok, json: async () => body })) as unknown as typeof fetch
+  afterEach(() => paths.setSource('local'))
+
+  it('asks the server that served the page which one it is', async () => {
+    expect(await paths.detectSource(meta({ origin: 'cloud' }))).toBe('cloud')
+    expect(paths.IS_CLOUD).toBe(true)
+    expect(paths.HOME).toBe('/site')
+    expect(await paths.detectSource(meta({ origin: 'edge' }))).toBe('local')
+    expect(paths.IS_CLOUD).toBe(false)
+  })
+
+  it('falls back to local when the server cannot be asked', async () => {
+    expect(await paths.detectSource((async () => { throw new Error('offline') }) as unknown as typeof fetch)).toBe('local')
+  })
+
+  it('sends Pi-owned features through the relay only from the cloud', () => {
+    expect(paths.P.site('s1', '/api/v1/crop-profiles/p1')).toBe('/api/v1/crop-profiles/p1')
+    paths.setSource('cloud')
+    expect(paths.P.site('s1', '/api/v1/crop-profiles/p1')).toBe('/api/v1/sites/s1/edge/crop-profiles/p1')
+    expect(paths.P.site('s1', '/api/v1/sites/s1/audit?limit=20')).toBe('/api/v1/sites/s1/edge/sites/s1/audit?limit=20')
   })
 })

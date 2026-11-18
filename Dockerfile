@@ -12,8 +12,8 @@ COPY apps/mobile/package.json ./apps/mobile/package.json
 # install ONLY the web app's dependencies from the lockfile (the workspace also contains the Expo app:
 # installing everything pulled ~568 packages / ~650 MB instead of ~150 / ~190 MB)
 RUN pnpm install --frozen-lockfile --filter @aerolab/web \
- && cd apps/web && pnpm build \
- && VITE_SOURCE=cloud pnpm build --outDir dist-cloud
+ && cd apps/web && pnpm build
+# ^ one dashboard build for both the Pi and the cloud: it asks the server that served it (GET /api/v1/meta)
 
 FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS gobuild
 ARG TARGETOS TARGETARCH
@@ -47,7 +47,7 @@ ENTRYPOINT ["/sbin/tini","--","/usr/local/bin/stack-entrypoint.sh"]
 FROM alpine:3.22 AS cloud
 RUN apk add --no-cache su-exec tini wget && adduser -D -H -u 10001 aerolab
 COPY --from=gobuild /out/cloud /usr/local/bin/cloud
-COPY --from=web /src/apps/web/dist-cloud /srv/web
+COPY --from=web /src/apps/web/dist /srv/web
 COPY infrastructure/docker/cloud-entrypoint.sh /usr/local/bin/cloud-entrypoint.sh
 ENV AEROLAB_CLOUD_HTTP_ADDR=0.0.0.0:8090 AEROLAB_CLOUD_STATIC_DIR=/srv/web
 EXPOSE 8090

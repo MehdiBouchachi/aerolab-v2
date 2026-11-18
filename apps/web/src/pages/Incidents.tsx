@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client'
 import { useApp } from '../app/context'
 import { useFetch } from '../app/hooks'
 import type { Incident } from '../api/types'
+import { P } from '../api/paths'
 import { ago, clock } from '../app/format'
 import { ErrorNote, Loading } from '../components/ui'
 import { Icon } from '../components/Icon'
@@ -16,7 +17,7 @@ export function Incidents() {
   const list = useFetch<{ incidents: Incident[] }>(`/api/v1/sites/${site}/incidents?state=${state}&limit=100`, ['incident.updated'])
   const ack = async (id: string) => {
     setErr(null)
-    try { await api('POST', `/api/v1/incidents/${id}/acknowledge`); list.reload() }
+    try { await api('POST', P.site(site, `/api/v1/incidents/${id}/acknowledge`)); list.reload() }
     catch (e) { setErr(e as ApiError) }
   }
 

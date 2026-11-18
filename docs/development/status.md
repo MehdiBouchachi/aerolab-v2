@@ -43,7 +43,7 @@ Legend: ✅ done and tested here · 🟡 done, partially verified · ⛔ not sta
 | Remote programme intents (PENDING_SITE→PENDING_DEVICE→APPLIED only on ESP32 confirm; stale/expired never run) | ✅ | cloud + Pi-worker + end-to-end tests (A06, A21) |
 | Edge sync worker (strict priority outbox, backoff+jitter, bounded batches, local opt-in `AEROLAB_REMOTE_PROGRAMS`) | ✅ | 9 worker tests; 5 end-to-end scenarios incl. WAN cut/restore (A01, A12, A18, A19) |
 | Cloud shows STALE when the Pi stops syncing | ✅ | end-to-end + browser check |
-| Same web app on the cloud origin (`VITE_SOURCE=cloud`) | ✅ | driven in headless Chromium |
+| One dashboard build for Pi and cloud (asks `GET /api/v1/meta`); Pi-owned features reach the Pi from the cloud through the relay | ✅ | unit + API tests |
 | Firmware portable core | ✅ host | 697 checks, ASan/UBSan, fixture parity with Go, power-cut simulation, 3 safety mutants caught |
 | Firmware ESP-IDF glue | 🟡 compiles + links (ESP-IDF v5.3, CI `firmware/idf-build`), never flashed; 4 MB flash assumed | needs a device |
 | Site identity (Ed25519) + pairing codes on the Pi | ✅ | Go tests + cross-language vector |

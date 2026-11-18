@@ -98,6 +98,9 @@ func main() {
 					if _, err := api.ExpireIntents(ctx, d); err != nil {
 						log.Warn("expire intents", "err", err)
 					}
+					if _, err := api.SweepRelay(ctx, d); err != nil {
+						log.Warn("sweep relay", "err", err)
+					}
 				}
 			}
 		}()
