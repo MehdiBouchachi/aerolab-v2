@@ -1,7 +1,9 @@
 // Screens follow the web dashboard (apps/web/src/pages) so both clients look and read the same.
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Pressable, View } from 'react-native'
+import { Text, TextInput } from './fonts'
+import { FullLogo } from './Logo'
 import { ApiFailure, freshnessLabel, type Reading } from '../core/session'
 import { acceptableHint, newChallenge, parsePairingPayload, PairingError, verifyIdentity } from '../core/identity'
 import type { Mode } from '../core/types'
@@ -50,6 +52,7 @@ export function Overview({ go }: { go: Go }) {
   const units = useResource<{ units: Unit[] }>(pairing ? p.units : null)
   const inc = useResource<{ incidents: Incident[] }>(pairing ? p.incidents('active', 5) : null)
   if (!pairing) return <Screen>
+    <View style={{ paddingVertical: 12 }}><FullLogo /></View>
     <PageTitle title="Welcome" subtitle="Pair this phone with your AeroLab site to get started." />
     <EmptyState icon="qr" title="No site paired yet">On the site, an administrator opens Administration → Phone pairing to show a QR code. Join the site Wi-Fi first.</EmptyState>
     <Btn kind="primary" icon="qr" label="Pair a site" onPress={() => go('pair')} />
@@ -437,6 +440,7 @@ export function LoginScreen({ done }: { done: () => void }) {
   }
   const idLabel = source === 'cloud' ? 'Email' : 'Username'
   return <Screen>
+    <View style={{ paddingVertical: 12 }}><FullLogo width={220} /></View>
     <PageTitle title="Sign in" subtitle={pairing?.name} />
     <Segmented label="Account type" value={source} onChange={v => { setSource(v); setErr(null) }} options={[['local', 'Site (local)'], ['cloud', 'Cloud']]} />
     <Text style={s.muted}>{source === 'local' ? 'Local accounts work with no internet and are separate from cloud accounts.' : 'Cloud accounts are separate from site accounts.'}</Text>

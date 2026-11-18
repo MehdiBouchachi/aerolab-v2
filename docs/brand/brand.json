@@ -1,0 +1,23 @@
+{
+  "brand": "Aerolab",
+  "system": "Smart Aeroponic Systems",
+  "source": "Vector reconstruction derived from approved PNG identity reference",
+  "colors": {
+    "background_dark": "#071B16",
+    "slate": "#0F172A",
+    "growth_green": "#22C55E",
+    "deep_green": "#059F6E",
+    "mint": "#A7F3D0",
+    "background_light": "#F7FAF8",
+    "white": "#FFFFFF"
+  },
+  "typography": {
+    "brand": "Sora",
+    "interface": "Inter",
+    "fallback": "system-ui, sans-serif"
+  },
+  "logo_usage": {
+    "on_light": "black A and leaf; white or pale surfaces",
+    "on_dark": "white A and leaf; dark surfaces"
+  }
+}

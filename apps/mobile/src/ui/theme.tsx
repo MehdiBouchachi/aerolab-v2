@@ -1,21 +1,24 @@
-// Visual tokens mirror apps/web/src/styles/dashboard.css (:root and :root[data-theme=dark]).
-// One blue for brand, navigation and actions; amber only for attention; red only for critical.
+// Visual tokens mirror apps/web/src/styles/brand.css (AeroLab V2 identity).
+// Light: #F7FAF8 surface, slate #0F172A ink, deep green #047857 for actions (growth green #22C55E is
+// only 2.3:1 on white, so it stays an accent). Dark: #071B16 surface, #22C55E actions.
+// Amber only for attention; red only for critical.
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { StyleSheet, useColorScheme } from 'react-native'
 import { cacheStore } from '../native'
+import { HEADING } from './fonts'
 
 export const light = {
-  bg: '#fafbfc', panel: '#ffffff', ink: '#182331', muted: '#667386', line: '#e5e9ee',
-  brand: '#2857bd', brandSoft: '#eef3fc', onBrand: '#ffffff',
+  bg: '#F7FAF8', panel: '#FFFFFF', ink: '#0F172A', muted: '#4B5D58', line: '#DFE8E3',
+  brand: '#047857', brandSoft: '#E3F5EC', onBrand: '#FFFFFF', accent: '#22C55E',
   attention: '#a76412', attentionSoft: '#fff4e5', danger: '#b23b44', dangerSoft: '#fcecee',
-  segTrack: '#edf0f3', segActive: '#ffffff', backdrop: 'rgba(11,18,32,0.4)',
+  segTrack: '#E9F0EC', segActive: '#FFFFFF', backdrop: 'rgba(7,27,22,0.4)',
 }
 export type Palette = typeof light
 export const dark: Palette = {
-  bg: '#141a22', panel: '#1c2530', ink: '#edf1f6', muted: '#aab7c5', line: '#34404e',
-  brand: '#a8bcff', brandSoft: '#27364f', onBrand: '#15213b',
+  bg: '#071B16', panel: '#0E2621', ink: '#ECF7F1', muted: '#A3BDB4', line: '#20403A',
+  brand: '#22C55E', brandSoft: '#123A2C', onBrand: '#071B16', accent: '#22C55E',
   attention: '#f5c47d', attentionSoft: '#3d3024', danger: '#ffa3a9', dangerSoft: '#422b33',
-  segTrack: '#141a22', segActive: '#323c48', backdrop: 'rgba(0,0,0,0.55)',
+  segTrack: '#071B16', segActive: '#1A3A32', backdrop: 'rgba(0,0,0,0.55)',
 }
 
 export type ThemeChoice = 'system' | 'light' | 'dark'
@@ -25,9 +28,9 @@ function makeStyles(c: Palette) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: c.bg },
     pad: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 28, gap: 12 },
-    h1: { fontSize: 26, lineHeight: 30, fontWeight: '800', letterSpacing: -0.6, color: c.ink },
-    h2: { fontSize: 17, fontWeight: '700', letterSpacing: -0.2, color: c.ink },
-    h3: { fontSize: 16, fontWeight: '700', color: c.ink },
+    h1: { fontFamily: HEADING, fontSize: 26, lineHeight: 32, fontWeight: '700', letterSpacing: -0.5, color: c.ink },
+    h2: { fontFamily: HEADING, fontSize: 17, fontWeight: '600', letterSpacing: -0.2, color: c.ink },
+    h3: { fontFamily: HEADING, fontSize: 16, fontWeight: '600', color: c.ink },
     text: { fontSize: 15, color: c.ink },
     strong: { fontSize: 15, fontWeight: '700', color: c.ink },
     muted: { fontSize: 13, color: c.muted },

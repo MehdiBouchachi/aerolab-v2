@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Text } from './fonts'
+import { BrandLockup } from './Logo'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Icon, type IconName } from './Icon'
 import { useTheme, type Palette } from './theme'
@@ -100,9 +102,8 @@ export function TopBar({ onBack, onAccount, accountActive }: { onBack?: () => vo
   return <View style={{ paddingTop: inset.top, backgroundColor: c.panel, borderBottomWidth: 1, borderBottomColor: c.line }}>
     <View style={{ height: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: onBack ? 4 : 16 }}>
       {onBack && <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} hitSlop={6} style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? c.brandSoft : 'transparent' })}><Icon name="back" size={22} color={c.brand} /></Pressable>}
-      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        {!onBack && <View style={{ width: 11, height: 11, borderWidth: 2, borderColor: c.brand, transform: [{ rotate: '45deg' }] }} />}
-        <Text accessibilityRole="header" style={{ fontSize: 18, fontWeight: '800', letterSpacing: -0.8, color: c.ink }}>AeroLab</Text>
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+        <BrandLockup />
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Account and settings" onPress={onAccount} hitSlop={6}
         style={({ pressed }) => ({ width: 44, height: 44, marginRight: onBack ? 8 : -8, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed || accountActive ? c.brandSoft : 'transparent' })}>

@@ -8,6 +8,8 @@ import { ago, type Summary } from './src/ui/format'
 import { usePaths, useResource } from './src/ui/hooks'
 import { AccountScreen, AlertsScreen, LoginScreen, Overview, PairScreen, SummaryCtx, UnitScreen, type Go } from './src/ui/screens'
 import { ThemeProvider, useTheme } from './src/ui/theme'
+import { useFonts } from 'expo-font'
+import { FONT_ASSETS, setFontsReady } from './src/ui/fonts'
 
 // Same structure as the web on phones: top bar, status strip, content, bottom tabs.
 type Pushed = { name: 'unit'; id: string } | { name: 'pair' } | { name: 'login' }
@@ -63,5 +65,10 @@ function Shell() {
 }
 
 export default function App() {
+  // Bundled brand fonts (no network). Render once they are registered; if loading fails, carry on
+  // with the system font rather than blocking the app.
+  const [loaded, error] = useFonts(FONT_ASSETS)
+  if (!loaded && !error) return null
+  setFontsReady(loaded && !error)
   return <SafeAreaProvider><ThemeProvider><AppProvider><Shell /></AppProvider></ThemeProvider></SafeAreaProvider>
 }
