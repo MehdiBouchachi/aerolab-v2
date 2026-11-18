@@ -10,9 +10,11 @@ import { AccountScreen, AlertsScreen, LoginScreen, Overview, PairScreen, Summary
 import { ThemeProvider, useTheme } from './src/ui/theme'
 import { useFonts } from 'expo-font'
 import { FONT_ASSETS, setFontsReady } from './src/ui/fonts'
+import { CropProfilesScreen } from './src/ui/SiteTools'
+import { AdministrationScreen } from './src/ui/AdministrationScreen'
 
 // Same structure as the web on phones: top bar, status strip, content, bottom tabs.
-type Pushed = { name: 'unit'; id: string } | { name: 'pair' } | { name: 'login' }
+type Pushed = { name: 'unit'; id: string } | { name: 'pair' } | { name: 'login'; cloud?: boolean } | { name: 'admin' }
 
 function Shell() {
   const { c, scheme } = useTheme()
@@ -24,7 +26,7 @@ function Shell() {
   const back = useCallback(() => setStack(st => st.slice(0, -1)), [])
   const go: Go = useCallback((to, arg) => {
     if (to === 'alerts' || to === 'account') { setStack([]); setTab(to); return }
-    setStack(st => [...st, to === 'unit' ? { name: 'unit', id: arg! } : { name: to }])
+    setStack(st => [...st, to === 'unit' ? { name: 'unit', id: arg! } : to === 'login' ? { name: 'login', cloud: arg === 'cloud' } : { name: to }])
   }, [])
 
   // Android hardware back pops the stack, then returns to Overview, then leaves the app.
@@ -54,12 +56,14 @@ function Shell() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {top?.name === 'unit' ? <UnitScreen key={top.id} id={top.id} go={go} />
           : top?.name === 'pair' ? <PairScreen done={back} />
-          : top?.name === 'login' ? <LoginScreen done={back} />
+          : top?.name === 'login' ? <LoginScreen done={back} cloud={top.cloud} />
+          : top?.name === 'admin' ? <AdministrationScreen />
           : tab === 'overview' ? <Overview go={go} />
           : tab === 'alerts' ? <AlertsScreen go={go} />
+          : tab === 'crops' ? <CropProfilesScreen key={pairing?.siteId} />
           : <AccountScreen go={go} />}
       </KeyboardAvoidingView>
-      {!modal && <TabBar tab={top ? (top.name === 'unit' ? 'overview' : null) : tab} onTab={t => { setStack([]); setTab(t) }} alertCount={d ? d.active_incidents.total ?? d.active_incidents.critical + d.active_incidents.warning : 0} />}
+      {!modal && <TabBar tab={top ? (top.name === 'unit' ? 'overview' : top.name === 'admin' ? 'account' : null) : tab} onTab={t => { setStack([]); setTab(t) }} alertCount={d ? d.active_incidents.total ?? d.active_incidents.critical + d.active_incidents.warning : 0} />}
     </View>
   </SummaryCtx.Provider>
 }

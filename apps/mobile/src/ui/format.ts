@@ -23,6 +23,16 @@ export interface Incident {
 export interface HistoryPoint { t: string; readings: Record<string, ReadingValue> }
 export interface History { points: HistoryPoint[]; gaps: { from: string; to: string }[]; resolution: string; truncated: boolean; contains_simulated_data: boolean; from: string; to: string }
 export interface Program { on_duration_seconds: number; off_duration_seconds: number; max_continuous_on_seconds: number }
+export interface CropProfile {
+  id: string; name: string; crop: string; variety?: string; version: number; unit_count: number
+  thresholds: Record<string, { min?: number; max?: number }>; program?: Program; value_source: string; notes?: string
+}
+export function incidentTitle(title: string): string {
+  return title.replace(/^([a-z][a-z0-9_]*) is (above|below) this unit's crop-profile range$/, (_, sensor: string, direction: string) => {
+    const name = label(sensor)
+    return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${direction} crop range`
+  })
+}
 export interface Applied { applied: { version: number; program: Program; applied_at: string } | null; controller_reported_version: number | null }
 
 export function ago(iso: string | number | null | undefined, now = Date.now()): string {
@@ -83,15 +93,24 @@ export const timeQualityText = (q?: string) =>
  */
 export function paths(source: Source, site: string) {
   const cloud = source === 'cloud'
+  const edge = (path: string) => cloud ? `/api/v1/sites/${site}/edge/${path}` : `/api/v1/${path}`
   const unitBase = (id: string) => cloud ? `/api/v1/sites/${site}/units/${id}` : `/api/v1/units/${id}`
   return {
     summary: `/api/v1/sites/${site}/summary`,
     units: `/api/v1/sites/${site}/units?limit=100`,
-    incidents: (state: 'active' | 'resolved', limit = 100) => `/api/v1/sites/${site}/incidents?state=${state}&limit=${limit}`,
+    addUnit: edge(`sites/${site}/units`),
+    crops: edge(`sites/${site}/crop-profiles`),
+    session: cloud ? `/api/v1/session?site=${encodeURIComponent(site)}` : '/api/v1/session',
+    storage: edge(`sites/${site}/storage`),
+    controllers: edge(`sites/${site}/devices`),
+    activity: edge(`sites/${site}/audit?limit=20`),
+    users: cloud ? `/api/v1/sites/${site}/members` : '/api/v1/local/users',
+    cloudLink: '/api/v1/cloud-link',
+    incidents: (state: 'active' | 'resolved', limit = 100, unit?: string) => `/api/v1/sites/${site}/incidents?state=${state}&limit=${limit}${unit ? `&unit_id=${encodeURIComponent(unit)}` : ''}`,
     unit: unitBase,
     history: (id: string, from: string, to: string) => `${unitBase(id)}/readings/history?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     applied: (id: string) => `${unitBase(id)}/programs/applied`,
-    acknowledge: (incident: string) => `/api/v1/incidents/${incident}/acknowledge`,
+    acknowledge: (incident: string) => edge(`incidents/${incident}/acknowledge`),
   }
 }
 

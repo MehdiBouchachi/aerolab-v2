@@ -27,6 +27,12 @@ export const SENSOR_LABEL: Record<string, string> = {
   ph: 'pH', ec_ms_cm: 'EC', reservoir_level_ok: 'Reservoir level', light_lux: 'Light',
 }
 export const label = (k: string) => SENSOR_LABEL[k] ?? k.replace(/_/g, ' ')
+export function incidentTitle(title: string): string {
+  return title.replace(/^([a-z][a-z0-9_]*) is (above|below) this unit's crop-profile range$/, (_, sensor: string, direction: string) => {
+    const name = label(sensor)
+    return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${direction} crop range`
+  })
+}
 
 export type Tone = 'ok' | 'warn' | 'crit' | 'muted'
 /** Plain-language status; never colour-only (always paired with text). */

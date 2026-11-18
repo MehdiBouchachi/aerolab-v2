@@ -29,3 +29,5 @@ Administration uses a short section index for direct access to storage, controll
 Administration views are selected by `?view=storage`, `controllers`, `users`, `pairing`, or `activity`, with only one view shown at a time. Users is a dedicated management view with search, account creation on demand, role changes, and enable/disable actions. The current view is a link, so Back, refresh, and sharing preserve it.
 
 Type uses the installed system sans stack, with tighter display spacing and quieter utility labels. No remote font or asset is required, preserving offline use.
+
+When a web UI changes, update the corresponding native mobile screen in the same change. Keep the neutral surfaces, compact typography, green primary actions, and gray selection states aligned. Mobile adapts tables into compact lists and uses modals for creation. Alert rows show the title, severity, and freshness first, with cause and suggested action under Alert details.

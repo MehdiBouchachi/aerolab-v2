@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useApp } from '../app/context'
 import { useFetch } from '../app/hooks'
 import type { Incident, Summary, Unit } from '../api/types'
-import { ago, label, showReading, unitStatus } from '../app/format'
+import { ago, incidentTitle, label, showReading, unitStatus } from '../app/format'
 import { Badge, Empty, ErrorNote, Loading, Sim } from '../components/ui'
 import { Icon } from '../components/Icon'
 
@@ -30,7 +30,25 @@ export function Overview({ children }: { children?: ReactNode }) {
       <div className="tile"><b>{s.units.healthy}</b><span>Normal</span></div>
       <div className={`tile ${s.active_incidents.critical ? 'crit' : ''}`}><b>{s.active_incidents.critical}</b><span>Critical alerts</span></div>
     </section>}
-    {inc.data && inc.data.incidents.length > 0 && <section aria-label="Active alerts"><h2>Active alerts</h2><ul className="alerts">{inc.data.incidents.slice(0, 5).map(i => <li key={i.id} className={i.severity}><Badge tone={i.severity === 'critical' ? 'crit' : 'warn'}>{i.severity}</Badge> <b>{i.title}</b> — <Link to={`/units/${i.unit_id}`}>{i.unit_id}</Link><div className="muted">{i.suggested_action}</div></li>)}</ul><Link to="/incidents">All alerts →</Link></section>}
+    {inc.data && inc.data.incidents.length > 0 && <section className="overview-alerts" aria-labelledby="overview-alerts-title">
+      <div className="section-heading">
+        <h2 id="overview-alerts-title">Active alerts</h2>
+        <Link className="card-link" to="/incidents">View alerts <Icon name="arrow" size={15} /></Link>
+      </div>
+      <ul>
+        {inc.data.incidents.slice(0, 5).map(i => {
+          const unit = units.data?.units.find(u => u.id === i.unit_id)
+          const tone = i.severity === 'critical' ? 'crit' : i.severity === 'warning' ? 'warn' : 'muted'
+          return <li key={i.id}>
+            <div className="overview-alert-copy">
+              <strong>{incidentTitle(i.title)}</strong>
+              <Link to={`/units/${i.unit_id}`}>{unit?.name.replace(/\s*\(SIMULATED\)$/i, '') ?? i.unit_id}</Link>
+            </div>
+            <Badge tone={tone}>{tone === 'crit' ? 'Critical' : tone === 'warn' ? 'Warning' : 'Info'}</Badge>
+          </li>
+        })}
+      </ul>
+    </section>}
     <div className="section-heading"><h2>Growing units</h2></div>
     {units.loading && <Loading what="units" />}
     {units.data && units.data.units.length === 0 && <Empty>No units yet.{can('manage_devices') ? ' Use “Add a unit” to connect your first controller.' : ' An administrator can add them.'}</Empty>}

@@ -76,6 +76,27 @@ main { padding-top: 2rem; }
 .overview-page .tile.crit b { color: var(--danger); }
 .overview-page .section-heading { margin: 1.6rem 0 .85rem; align-items: baseline; }
 .overview-page .section-heading h2 { margin: 0; font-size: 1.1rem; font-weight: 700; }
+.overview-alerts .section-heading { justify-content: space-between; gap: .5rem; }
+.overview-alerts ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.overview-alerts li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .7rem .9rem; }
+.overview-alerts li + li { border-top: 1px solid var(--line); }
+.overview-alert-copy { display: grid; gap: .1rem; min-width: 0; overflow-wrap: anywhere; font-size: .85rem; }
+.overview-alert-copy a { justify-self: start; color: var(--muted); font-size: .76rem; text-decoration: none; }
+.overview-alert-copy a:hover { text-decoration: underline; }
+.overview-alerts li > .badge { flex: none; }
+.incident-list.incident-list-surface { display: block; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.incident-entry { padding: .85rem 1rem; overflow-wrap: anywhere; }
+.incident-entry + .incident-entry { border-top: 1px solid var(--line); }
+.incident-entry-header { display: flex; align-items: flex-start; justify-content: space-between; gap: .65rem; }
+.incident-entry-header > .badge { flex: none; }
+.incident-entry h2 { margin: 0 0 .25rem; font-size: .95rem; }
+.incident-entry-meta { display: flex; flex-wrap: wrap; gap: .25rem .75rem; color: var(--muted); font-size: .76rem; }
+.incident-entry-meta a { display: inline-flex; align-items: center; gap: .25rem; }
+.incident-entry-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .5rem; margin-top: .35rem; }
+.incident-entry-actions summary { cursor: pointer; width: fit-content; padding-block: .35rem; color: var(--muted); font-size: .8rem; }
+.incident-entry-detail { display: grid; gap: .6rem; max-width: 75ch; padding: .4rem 0; font-size: .83rem; }
+.incident-entry-detail p { margin: 0; }
+@media (max-width: 480px) { .incident-entry-actions { grid-template-columns: 1fr; } .incident-entry-actions button { justify-self: start; } }
 .overview-page .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; }
 .overview-page .card { padding: 1.2rem 1.35rem; border: 1px solid var(--line); border-radius: 10px; box-shadow: none; transition: border-color .15s, box-shadow .15s; }
 .overview-page .card:hover { border-color: var(--line); box-shadow: none; }

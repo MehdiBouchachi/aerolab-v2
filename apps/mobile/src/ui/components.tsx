@@ -38,7 +38,7 @@ export function Btn({ label, onPress, kind = 'secondary', disabled, icon, style 
       opacity: disabled ? 0.55 : pressed ? 0.8 : 1,
     }, style]}>
     {icon && <Icon name={icon} size={18} color={fg} />}
-    <Text style={{ color: fg, fontSize: 15, fontWeight: kind === 'primary' ? '700' : '600' }}>{label}</Text>
+    <Text style={{ color: fg, fontSize: 14, fontWeight: kind === 'primary' ? '700' : '600' }}>{label}</Text>
   </Pressable>
 }
 
@@ -128,11 +128,11 @@ export function StatusStrip({ items, simulated }: { items: { icon: IconName; tex
   </View>
 }
 
-export type Tab = 'overview' | 'alerts' | 'account'
+export type Tab = 'overview' | 'alerts' | 'crops' | 'account'
 /** Bottom tab bar, same three destinations and treatment as the web on phones. */
 export function TabBar({ tab, onTab, alertCount }: { tab: Tab | null; onTab: (t: Tab) => void; alertCount: number }) {
   const { c } = useTheme(); const inset = useSafeAreaInsets()
-  const items: [Tab, IconName, string][] = [['overview', 'overview', 'Overview'], ['alerts', 'alerts', 'Alerts'], ['account', 'admin', 'Account']]
+  const items: [Tab, IconName, string][] = [['overview', 'overview', 'Overview'], ['alerts', 'alerts', 'Alerts'], ['crops', 'beaker', 'Crops'], ['account', 'admin', 'Account']]
   return <View accessibilityRole="tablist" style={{ flexDirection: 'row', paddingBottom: Math.max(inset.bottom, 6), paddingTop: 4, paddingHorizontal: 6, backgroundColor: c.panel, borderTopWidth: 1, borderTopColor: c.line }}>
     {items.map(([t, icon, l]) => {
       const on = tab === t

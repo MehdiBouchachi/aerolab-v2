@@ -83,7 +83,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     async selectSite(id) { setSelected(id); await cacheStore.set(SELECTED, id) },
     async setMode(m) { setModeState(m); await cacheStore.set(MODE, m) },
-    async setCloudUrl(url) { if (!pairing) return; const next = pairings.map(p => (p.siteId === pairing.siteId ? { ...p, cloudUrl: url || undefined } : p)); setPairings(next); await cacheStore.set(PAIRINGS, JSON.stringify(next)) },
+    async setCloudUrl(url) {
+      if (!pairing || (pairing.cloudUrl ?? '') === url) return
+      await tokens.clear(pairing.siteId, 'cloud')
+      const next = pairings.map(p => p.siteId === pairing.siteId ? { ...p, cloudUrl: url || undefined } : p)
+      await cacheStore.set(PAIRINGS, JSON.stringify(next))
+      setPairings(next)
+    },
     async signedIn(source, username, token) {
       if (!pairing) return
       await tokens.set(pairing.siteId, source, token); await cacheStore.set(USER + pairing.siteId + '|' + source, username)

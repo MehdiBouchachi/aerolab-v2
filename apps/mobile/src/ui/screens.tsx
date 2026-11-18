@@ -5,18 +5,20 @@ import { ActivityIndicator, Pressable, View } from 'react-native'
 import { Text, TextInput } from './fonts'
 import { FullLogo } from './Logo'
 import { ApiFailure, freshnessLabel, type Reading } from '../core/session'
-import { acceptableHint, newChallenge, parsePairingPayload, PairingError, verifyIdentity } from '../core/identity'
+import { acceptableCloudAddress, acceptableHint, parsePairingPayload, PairingError } from '../core/identity'
+import { probeLocal } from '../core/connection'
 import type { Mode } from '../core/types'
 import { random } from '../native'
 import { useApp } from './AppState'
 import { Badge, Banner, Btn, EmptyState, Loading, PageTitle, Screen, SectionHeading, Segmented, Sim } from './components'
-import { ago, CARD_KEYS, label, orderReadings, SHORT_LABEL, showReading, stripSimSuffix, timeQualityText, unitStatus, type Applied, type History, type Incident, type Summary, type Unit } from './format'
+import { ago, CARD_KEYS, incidentTitle, label, orderReadings, SHORT_LABEL, showReading, stripSimSuffix, timeQualityText, unitStatus, type Applied, type History, type Incident, type Summary, type Unit } from './format'
 import { HistoryCompare } from './HistoryCompare'
-import { usePaths, useResource } from './hooks'
+import { usePaths, useResource, useSiteCapabilities } from './hooks'
+import { AddUnitModal } from './SiteTools'
 import { Icon } from './Icon'
 import { useTheme } from './theme'
 
-export type Go = (to: 'unit' | 'pair' | 'login' | 'alerts' | 'account', arg?: string) => void
+export type Go = (to: 'unit' | 'pair' | 'login' | 'alerts' | 'account' | 'admin', arg?: string) => void
 
 /** Site summary is shared by the shell (status strip, alert count) and the Overview. */
 export const SummaryCtx = createContext<{ r: Reading<Summary> | null; err: string | null; reload: () => Promise<void> }>({ r: null, err: null, reload: async () => {} })
@@ -46,43 +48,47 @@ function ConnectionNotice({ go }: { go: Go }) {
 
 export function Overview({ go }: { go: Go }) {
   const { c, s } = useTheme()
-  const { pairing, pairings, selectSite } = useApp()
+  const { pairing, pairings, selectSite, decision } = useApp()
   const p = usePaths()
   const sum = useSummary()
   const units = useResource<{ units: Unit[] }>(pairing ? p.units : null)
-  const inc = useResource<{ incidents: Incident[] }>(pairing ? p.incidents('active', 5) : null)
+  const permissions = useSiteCapabilities()
+  const [adding, setAdding] = useState(false)
+  const canAdd = decision?.kind === 'live' && !!permissions.r?.data.capabilities.includes('manage_devices')
   if (!pairing) return <Screen>
     <View style={{ paddingVertical: 12 }}><FullLogo /></View>
-    <PageTitle title="Welcome" subtitle="Pair this phone with your AeroLab site to get started." />
+    <PageTitle title="Welcome" />
     <EmptyState icon="qr" title="No site paired yet">On the site, an administrator opens Administration → Phone pairing to show a QR code. Join the site Wi-Fi first.</EmptyState>
     <Btn kind="primary" icon="qr" label="Pair a site" onPress={() => go('pair')} />
   </Screen>
   const d = sum.r?.data
   const list = units.r?.data.units
-  return <Screen onRefresh={() => { void sum.reload(); void units.reload(); void inc.reload() }} refreshing={false}>
-    <PageTitle title="Overview" subtitle={pairing.name} />
+  return <Screen onRefresh={() => { void sum.reload(); void units.reload() }} refreshing={false}>
+    <View style={s.between}>
+      <View style={{ gap: 2, flex: 1 }}>
+        <Text accessibilityRole="header" style={[s.h1, { fontSize: 19, lineHeight: 24 }]}>Overview</Text>
+        <Text style={s.small}>{pairing.name}</Text>
+      </View>
+      {canAdd && <Btn kind="primary" label="Add a unit" onPress={() => setAdding(true)} />}
+    </View>
+    {adding && <AddUnitModal key={pairing.siteId} onClose={() => setAdding(false)}
+      onCreated={() => { void units.reload(); void sum.reload() }} onOpen={id => { setAdding(false); go('unit', id) }} />}
     {pairings.length > 1 && <Segmented label="Site" value={pairing.siteId} options={pairings.map(x => [x.siteId, x.name] as [string, string])} onChange={id => void selectSite(id)} />}
     <ConnectionNotice go={go} />
     {d?.site_stale && <Banner tone="warn" title="Site not syncing">Showing the last known values. This does not prove the pumps stopped.</Banner>}
     {sum.err && !sum.r && <Banner tone="warn">{sum.err}</Banner>}
     {d && <View accessibilityLabel="Site summary" style={[s.panel, { flexDirection: 'row', overflow: 'hidden' }]}>
       {([[d.units.total, 'Total units', null], [d.units.attention, 'Need attention', d.units.attention ? c.attention : null], [d.units.healthy, 'Normal', null], [d.active_incidents.critical, 'Critical alerts', d.active_incidents.critical ? c.danger : null]] as [number, string, string | null][]).map(([n, l, col], i) =>
-        <View key={l} accessible accessibilityLabel={`${n} ${l}`} style={{ flex: 1, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 2, borderLeftWidth: i ? 1 : 0, borderLeftColor: c.line }}>
-          <Text style={{ fontSize: 22, fontWeight: '800', color: col ?? c.ink }}>{n}</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 11, color: c.muted, marginTop: 1 }}>{l}</Text>
+        <View key={l} accessible accessibilityLabel={`${n} ${l}`} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, paddingHorizontal: 3, borderLeftWidth: i ? 1 : 0, borderLeftColor: c.line }}>
+          <Text style={{ fontSize: 17, fontWeight: '700', color: col ?? c.ink }}>{n}</Text>
+          <Text style={{ fontSize: 10.5, color: c.muted, textAlign: 'center' }}>{l}</Text>
         </View>)}
     </View>}
 
-    {inc.r && inc.r.data.incidents.length > 0 && <>
-      <SectionHeading title="Active alerts" />
-      {inc.r.data.incidents.map(i => <Pressable key={i.id} accessibilityRole="button" onPress={() => go('unit', i.unit_id)} style={({ pressed }) => [s.panel, { padding: 12, gap: 4, opacity: pressed ? 0.85 : 1 }]}>
-        <View style={s.row}><Badge tone={i.severity === 'critical' ? 'crit' : 'warn'}>{i.severity}</Badge><Text style={[s.strong, { flex: 1, fontSize: 14 }]} numberOfLines={2}>{i.title}</Text></View>
-        <Text style={s.muted}>{i.unit_id} · {i.suggested_action}</Text>
-      </Pressable>)}
-      <Btn kind="link" label="All alerts →" onPress={() => go('alerts')} />
-    </>}
+    {!!d && (d.active_incidents.total ?? d.active_incidents.critical + d.active_incidents.warning) > 0 &&
+      <Btn kind="link" label="View active alerts" onPress={() => go('alerts')} />}
 
-    <SectionHeading title="Growing units" right={list ? `${list.length} units` : undefined} />
+    <SectionHeading title="Growing units" />
     {!list && units.loading && <Loading what="units" />}
     {units.err && !units.r && <Banner tone="warn">{units.err}</Banner>}
     {list && list.length === 0 && <EmptyState icon="overview" title="No units yet">No units are registered yet. An administrator can register a controller under Administration on the web.</EmptyState>}
@@ -96,31 +102,28 @@ function UnitCard({ u, onOpen }: { u: Unit; onOpen: () => void }) {
   const st = unitStatus(u); const r = u.latest_readings
   return <Pressable accessibilityRole="button" accessibilityLabel={`${stripSimSuffix(u.name)}, ${st.text}. View unit`} onPress={onOpen}
     style={({ pressed }) => [s.panel, { overflow: 'hidden', backgroundColor: pressed ? c.bg : c.panel }]}>
-    <View style={{ paddingHorizontal: 14, paddingTop: 13, gap: 10 }}>
-      <View style={s.row}>
-        <Text numberOfLines={1} style={[s.h3, { flexShrink: 1, color: st.tone === 'muted' ? c.muted : c.ink }]}>{stripSimSuffix(u.name)}</Text>
-        {u.is_simulated && <Sim />}
-        <View style={{ marginLeft: 'auto' }}><Badge tone={st.tone}>{st.text}</Badge></View>
+    <View style={{ padding: 10, gap: 7 }}>
+      <View style={[s.between, { alignItems: 'flex-start' }]}>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={[s.strong, { fontSize: 13 }]}>{stripSimSuffix(u.name)}</Text>
+          <View style={[s.row, { flexWrap: 'wrap', gap: 4 }]}>
+            {u.is_simulated && <Sim />}
+            <Badge tone={st.tone}>{st.text}</Badge>
+          </View>
+        </View>
+        <Icon name="arrow" size={16} color={c.muted} />
       </View>
-      {u.connection !== 'ONLINE' && u.last_state_at && <Text style={s.muted}>Last heard {ago(u.last_state_at)}.{u.connection === 'STALE' ? ' The controller may still be irrigating on its own programme.' : ''}</Text>}
+      {u.connection !== 'ONLINE' && u.last_state_at && <Text style={s.small}>Last heard {ago(u.last_state_at)}</Text>}
       <View style={{ flexDirection: 'row' }}>
         {CARD_KEYS.map((k, i) => {
           const v = r?.readings[k]
           return <View key={k} accessible accessibilityLabel={`${label(k)}: ${r ? showReading(v) : 'no data'}`} style={{ flex: 1, paddingLeft: i ? 9 : 0, paddingRight: 4, borderLeftWidth: i ? 1 : 0, borderLeftColor: c.line }}>
             <Text style={{ fontSize: 11, color: c.muted }}>{SHORT_LABEL[k]}</Text>
-            <Text style={{ fontSize: 14.5, fontWeight: '700', marginTop: 2, color: v?.quality === 'valid' ? c.ink : c.muted }}>{r ? showReading(v) : 'No data'}</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', marginTop: 2, color: v?.quality === 'valid' ? c.ink : c.muted }}>{r ? showReading(v) : 'No data'}</Text>
           </View>
         })}
       </View>
-      <View style={[s.divider]} />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, rowGap: 2, paddingBottom: 10 }}>
-        <Text style={{ fontSize: 12, color: c.muted }}>Pump <Text style={{ color: c.ink, fontWeight: '700' }}>{u.pump_commanded ? `Commanded ${u.pump_commanded}` : 'Unknown'}</Text>  Flow not verified</Text>
-        <Text style={{ fontSize: 12, color: c.muted }}>Programme <Text style={{ color: c.ink, fontWeight: '700' }}>{u.applied_program_version ? `Version ${u.applied_program_version}` : 'None applied'}</Text></Text>
-      </View>
-    </View>
-    <View style={[s.between, { borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: 14, paddingVertical: 10 }]}>
-      <Text style={[s.small, { flex: 1 }]} numberOfLines={1}>{r ? `Reading ${r.outdated ? 'outdated ' : ''}${ago(r.effective_at_utc)}${r.time_quality && r.time_quality !== 'DEVICE_CLOCK' ? ' · time estimated by the Pi' : ''}` : 'No readings stored yet'}</Text>
-      <View style={s.row}><Text style={{ color: c.brand, fontWeight: '700', fontSize: 13 }}>View unit</Text><Icon name="arrow" size={15} color={c.brand} /></View>
+      {r && <Text style={s.small}>{r.outdated ? 'Outdated reading' : `Updated ${ago(r.effective_at_utc)}`}</Text>}
     </View>
   </Pressable>
 }
@@ -139,7 +142,7 @@ export function UnitScreen({ id, go }: { id: string; go: Go }) {
   const st = u ? unitStatus(u) : null
   return <Screen onRefresh={() => void unit.reload()} refreshing={false}>
     <View style={{ gap: 6 }}>
-      <View style={[s.row, { flexWrap: 'wrap' }]}><Text accessibilityRole="header" style={[s.h1, { fontSize: 24 }]}>{u ? stripSimSuffix(u.name) : id}</Text>{u?.is_simulated && <Sim />}</View>
+      <View style={[s.row, { flexWrap: 'wrap' }]}><Text accessibilityRole="header" style={s.h1}>{u ? stripSimSuffix(u.name) : id}</Text>{u?.is_simulated && <Sim />}</View>
       {st && <View style={{ alignSelf: 'flex-start' }}><Badge tone={st.tone}>{st.text}</Badge></View>}
     </View>
     <ConnectionNotice go={go} />
@@ -165,6 +168,8 @@ function Fact({ k, v, sub, first, danger }: { k: string; v: string; sub?: string
 function UnitOverview({ u }: { u: Unit }) {
   const { c, s } = useTheme()
   const [more, setMore] = useState(false)
+  const p = usePaths()
+  const alerts = useResource<{ incidents: Incident[] }>(p.incidents('active', 100, u.id))
   const r = u.latest_readings
   return <>
     <View style={[s.panel, { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 }]}>
@@ -184,6 +189,10 @@ function UnitOverview({ u }: { u: Unit }) {
       </View>}
     </View>
 
+    {!!alerts.r?.data.incidents.length && <>
+      <SectionHeading title="Active alerts" />
+      <AlertRows items={alerts.r.data.incidents} />
+    </>}
     <SectionHeading title="Current readings" right={r ? `Taken ${ago(r.effective_at_utc)}` : undefined} />
     {!r ? <EmptyState icon="clock" title="No readings yet">No readings have been stored for this unit yet.</EmptyState> : <View style={s.panel}>
       <Text style={[s.small, { padding: 10, borderBottomWidth: 1, borderBottomColor: c.line }]}>{new Date(r.effective_at_utc).toLocaleString()} · {timeQualityText(r.time_quality)}{r.outdated ? ' · OUTDATED' : ''}</Text>
@@ -239,63 +248,84 @@ function UnitProgramme({ id }: { id: string }) {
         <Fact k="Reservoir protection" v="Always on" />
       </View>
       : <EmptyState icon="clock" title="No programme applied">{`No programme confirmed through this source${a.controller_reported_version ? ` · the controller reports version ${a.controller_reported_version}` : ''}.`}</EmptyState>)}
-    <Banner tone="muted" title="Changing the programme">Programme changes are made from the web dashboard, which shows the review step and the controller's confirmation.</Banner>
+    <Text style={s.small}>Edit timing in the web dashboard.</Text>
   </>
 }
 
 // ------------------------------------------------------------------ Alerts
 
 export function AlertsScreen({ go }: { go: Go }) {
-  const { c, s } = useTheme()
+  const { s } = useTheme()
   const { decision, session } = useApp()
   const p = usePaths()
   const [state, setState] = useState<'active' | 'resolved'>('active')
   const [err, setErr] = useState<string | null>(null)
   const list = useResource<{ incidents: Incident[] }>(p.incidents(state))
+  const permissions = useSiteCapabilities()
+  const [acknowledging, setAcknowledging] = useState<string | null>(null)
   const live = decision?.kind === 'live'
+  const canAck = live && !!permissions.r?.data.capabilities.includes('ack_incident')
   const ack = async (incident: string) => {
+    if (!canAck || acknowledging) return
+    setAcknowledging(incident)
     setErr(null)
     try { await session.post(p.acknowledge(incident), {}, `ack-${incident}-${Array.from(random(6)).join('')}`, live); await list.reload() }
     catch (e) { setErr(e instanceof ApiFailure ? (e.status === 403 ? 'Your account cannot acknowledge alerts.' : e.message) : 'Could not acknowledge the alert.') }
+    finally { setAcknowledging(null) }
   }
   const items = list.r?.data.incidents
   return <Screen onRefresh={() => void list.reload()} refreshing={false}>
-    <PageTitle title="Alerts" subtitle="Controller faults and their resolution history." right={items ? <Text style={s.muted}>{items.length} {state === 'active' ? 'active' : 'resolved'}</Text> : undefined} />
+    <PageTitle title="Alerts" right={items?.length ? <Text style={s.muted}>{items.length} {state === 'active' ? 'active' : 'resolved'}</Text> : undefined} />
     <Segmented label="Alert status" value={state} onChange={setState} options={[['active', 'Active'], ['resolved', 'History']]} />
     <ConnectionNotice go={go} />
     {(err ?? (list.err && !list.r ? list.err : null)) && <Banner tone="crit">{err ?? list.err ?? ''}</Banner>}
     {!items && list.loading && <Loading what="alerts" />}
     {items && items.length === 0 && (state === 'active'
-      ? <EmptyState icon="check" title="No active alerts">New controller faults will appear here when they are reported.</EmptyState>
-      : <EmptyState icon="clock" title="No resolved alerts yet">Alerts will appear here after the controller stops reporting the fault.</EmptyState>)}
-    {items?.map(i => {
+      ? <EmptyState icon="check" title="No active alerts">Reported faults appear here.</EmptyState>
+      : <EmptyState icon="clock" title="No resolved alerts yet">Cleared faults appear here.</EmptyState>)}
+    {!!items?.length && <AlertRows items={items} onUnit={id => go('unit', id)}
+      onAck={canAck ? id => void ack(id) : undefined} acknowledging={acknowledging} />}
+    {state === 'active' && canAck && items?.some(i => i.status.endsWith('UNACKNOWLEDGED')) &&
+      <Text style={s.small}>Acknowledging marks an alert as seen. The controller clears the fault.</Text>}
+  </Screen>
+}
+
+function AlertRows({ items, onUnit, onAck, acknowledging }: {
+  items: Incident[]; onUnit?: (id: string) => void; onAck?: (id: string) => void; acknowledging?: string | null
+}) {
+  const { c, s } = useTheme()
+  const [expanded, setExpanded] = useState<string | null>(null)
+  return <View style={s.panel}>
+    {items.map((i, index) => {
+      const open = expanded === i.id
       const tone = i.severity === 'critical' ? 'crit' : i.severity === 'warning' ? 'warn' : 'muted'
-      const col = tone === 'crit' ? c.danger : tone === 'warn' ? c.attention : c.muted
-      return <View key={i.id} style={[s.panel, { overflow: 'hidden' }]}>
-        <View style={{ padding: 14, gap: 10, borderLeftWidth: 3, borderLeftColor: col }}>
-          <View style={[s.row, { alignItems: 'flex-start' }]}>
-            <Icon name={tone === 'crit' ? 'critical' : tone === 'warn' ? 'warning' : 'alerts'} size={19} color={col} />
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: col, textTransform: 'uppercase' }}>{i.severity}{i.code ? <Text style={{ color: c.muted, fontWeight: '500' }}>  {i.code.replace(/_/g, ' ')}</Text> : null}</Text>
-              <Text style={s.h3}>{i.title}</Text>
-            </View>
-          </View>
-          <Pressable accessibilityRole="link" onPress={() => go('unit', i.unit_id)} style={[s.row, { alignSelf: 'flex-start' }]}><Text style={{ color: c.brand, fontWeight: '600' }}>{i.unit_id}</Text><Icon name="arrow" size={14} color={c.brand} /></Pressable>
-          {i.cause ? <View><Text style={s.small}>CAUSE</Text><Text style={[s.text, { fontSize: 14 }]}>{i.cause}</Text></View> : null}
-          <View><Text style={s.small}>SUGGESTED ACTION</Text><Text style={[s.text, { fontSize: 14 }]}>{i.suggested_action}</Text></View>
-          {i.note ? <Text style={s.muted}>{i.note}</Text> : null}
-          <View style={{ gap: 1 }}>
-            {i.first_seen_at && <Text style={s.small}>First seen {new Date(i.first_seen_at).toLocaleString()}</Text>}
-            {i.last_seen_at && <Text style={s.small}>Last seen {ago(i.last_seen_at)}</Text>}
-            {i.resolved_at && <Text style={s.small}>Resolved {new Date(i.resolved_at).toLocaleString()}</Text>}
-            {i.acknowledged_at && <Text style={s.small}>Acknowledged {new Date(i.acknowledged_at).toLocaleString()}</Text>}
-          </View>
-          {i.status.endsWith('UNACKNOWLEDGED') && <Btn label={live ? 'Acknowledge' : 'Acknowledge (connect to the site or cloud)'} disabled={!live} onPress={() => void ack(i.id)} />}
+      return <View key={i.id} style={{ padding: 12, gap: 5, borderTopWidth: index ? 1 : 0, borderTopColor: c.line }}>
+        <View style={[s.between, { alignItems: 'flex-start' }]}>
+          <Text style={[s.strong, { flex: 1 }]}>{incidentTitle(i.title)}</Text>
+          <Badge tone={tone}>{tone === 'crit' ? 'Critical' : tone === 'warn' ? 'Warning' : 'Info'}</Badge>
         </View>
+        <Text style={s.small}>{i.resolved_at ? `Resolved ${ago(i.resolved_at)}` : `Last seen ${ago(i.last_seen_at)}`}{i.acknowledged_at ? ' / Acknowledged' : ''}</Text>
+        <View style={[s.row, { flexWrap: 'wrap', columnGap: 16 }]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setExpanded(open ? null : i.id)}
+            style={[s.row, { minHeight: 44 }]}>
+            <Icon name="chevron" size={13} color={c.muted} />
+            <Text style={s.muted}>{open ? 'Hide details' : 'Alert details'}</Text>
+          </Pressable>
+          {onUnit && <Btn kind="link" label="View unit" onPress={() => onUnit(i.unit_id)} />}
+        </View>
+        {open && <View style={{ gap: 6 }}>
+          <Text style={s.strong}>Suggested action</Text><Text style={s.text}>{i.suggested_action}</Text>
+          {i.cause && <><Text style={s.strong}>Cause</Text><Text style={s.text}>{i.cause}</Text></>}
+          {i.note && <Text style={s.muted}>{i.note}</Text>}
+          {i.first_seen_at && <Text style={s.small}>First seen {new Date(i.first_seen_at).toLocaleString()}</Text>}
+          {i.acknowledged_at && <Text style={s.small}>Acknowledged {new Date(i.acknowledged_at).toLocaleString()}</Text>}
+          {i.code && <Text style={s.small}>{i.code}</Text>}
+        </View>}
+        {onAck && i.status.endsWith('UNACKNOWLEDGED') && <Btn label={acknowledging === i.id ? 'Acknowledging...' : 'Acknowledge'}
+          disabled={!!acknowledging} onPress={() => onAck(i.id)} style={{ alignSelf: 'flex-start' }} />}
       </View>
     })}
-    <View style={[s.row, { alignItems: 'flex-start', marginTop: 4 }]}><Icon name="alerts" size={15} color={c.muted} /><Text style={[s.muted, { flex: 1 }]}>Acknowledging means you have seen an alert. The controller resolves it when the fault clears.</Text></View>
-  </Screen>
+  </View>
 }
 
 // ------------------------------------------------------------------ Account
@@ -310,8 +340,10 @@ export function AccountScreen({ go }: { go: Go }) {
   const { mode, setMode, pairing, pairings, selectSite, removePairing, setCloudUrl, decision, userId, signOut } = useApp()
   const [cloud, setCloud] = useState(pairing?.cloudUrl ?? '')
   const [cloudMsg, setCloudMsg] = useState<string | null>(null)
-  const opts: [Mode, string, string][] = [['auto', 'Automatic', 'Use the site when reachable, otherwise the cloud.'], ['local', 'Local only', 'Only the site Wi-Fi. Never the cloud.'], ['cloud', 'Cloud only', 'Only the cloud. Never the local network.']]
+  useEffect(() => { setCloud(pairing?.cloudUrl ?? ''); setCloudMsg(null) }, [pairing?.siteId, pairing?.cloudUrl])
+  const opts: [Mode, string, string?][] = [['auto', 'Automatic', 'Site first, then cloud'], ['local', 'Local only'], ['cloud', 'Cloud only']]
   const live = decision?.kind === 'live' ? decision : null
+  const permissions = useSiteCapabilities()
   return <Screen>
     <PageTitle title="Account" subtitle={pairing ? pairing.name : 'No site paired'} />
     {live && <View style={[s.panel, { padding: 14, gap: 10 }]}>
@@ -322,6 +354,8 @@ export function AccountScreen({ go }: { go: Go }) {
       <Btn kind="danger" label="Sign out" onPress={() => void signOut(live.source)} />
     </View>}
     <ConnectionNotice go={go} />
+    {live && permissions.r?.data.capabilities.includes('manage_users') &&
+      <Btn icon="admin" label="Administration" onPress={() => go('admin')} />}
 
     <Group title="Appearance">
       <Segmented label="Appearance" value={choice} onChange={setChoice} options={[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']]} />
@@ -332,21 +366,22 @@ export function AccountScreen({ go }: { go: Go }) {
         {opts.map(([m, l, d], i) => <Pressable key={m} accessibilityRole="radio" accessibilityState={{ selected: mode === m }} onPress={() => void setMode(m)}
           style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderTopWidth: i ? 1 : 0, borderTopColor: c.line, backgroundColor: pressed ? c.bg : c.panel })}>
           <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: mode === m ? c.brand : c.line, alignItems: 'center', justifyContent: 'center' }}>{mode === m && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.brand }} />}</View>
-          <View style={{ flex: 1 }}><Text style={s.strong}>{l}</Text><Text style={s.muted}>{d}</Text></View>
+          <View style={{ flex: 1 }}><Text style={s.strong}>{l}</Text>{d && <Text style={s.muted}>{d}</Text>}</View>
         </Pressable>)}
       </View>
-      <Text style={s.small}>Switching source starts a fresh connection: nothing from the other source is shown.</Text>
     </Group>
 
     {pairing && <Group title="Cloud address">
-      <View><Text style={s.fieldLabel}>Cloud address (https)</Text>
+      <View><Text style={s.fieldLabel}>Cloud address</Text>
         <TextInput style={s.input} value={cloud} onChangeText={t => { setCloud(t); setCloudMsg(null) }} autoCapitalize="none" autoCorrect={false} keyboardType="url" placeholder="https://…" placeholderTextColor={c.muted} accessibilityLabel="Cloud address" /></View>
       {cloudMsg && <Text style={{ color: c.danger, fontSize: 13 }}>{cloudMsg}</Text>}
       <Btn label="Save cloud address" onPress={() => {
-        const h = acceptableHint(cloud)
-        if (cloud && (!h || h.insecureLab)) { setCloudMsg('Enter an https:// address.'); return }
-        void setCloudUrl(h?.url ?? ''); setCloudMsg(null)
+        const value = cloud.trim()
+        const h = value ? acceptableCloudAddress(value) : null
+        if (value && !h) { setCloudMsg('Use HTTPS, or a private Wi-Fi address for the Docker demo.'); return }
+        void setCloudUrl(h?.url ?? '').catch(() => setCloudMsg('Could not save the cloud address.'))
       }} />
+      {pairing.cloudUrl && <Btn kind="link" label="Sign in to cloud" onPress={() => go('login', 'cloud')} />}
     </Group>}
 
     <Group title="Sites">
@@ -371,34 +406,50 @@ export function PairScreen({ done }: { done: () => void }) {
   const [perm, ask] = useCameraPermissions()
   const [manual, setManual] = useState(false)
   const [payload, setPayload] = useState('')
+  const [siteAddress, setSiteAddress] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const doPair = useCallback(async (raw: string) => {
     setBusy(true); setMsg(null)
     try {
       const p = parsePairingPayload(raw)
-      for (const hint of p.hints) {
-        const h = acceptableHint(hint); if (!h) continue
-        // 1) verify the Pi BEFORE sending it the code: it must prove it holds the key printed in the QR
-        const challenge = newChallenge(env.random)
-        const idr = await env.fetch(`${h.url}/api/v1/identity?challenge=${encodeURIComponent(challenge)}`).then(r => r.json()).catch(() => null)
-        if (!idr || !verifyIdentity({ siteId: p.site, publicKey: p.pk }, challenge, idr)) continue
+      const suppliedAddress = siteAddress.trim()
+      const override = suppliedAddress ? acceptableHint(suppliedAddress) : null
+      if (suppliedAddress && !override) {
+        setMsg('Enter the site address including http:// or https://.')
+        return
+      }
+      const localHints = (override ? [override.url] : p.hints).filter(hint => !/^https?:\/\/(localhost|127\.[\d.]+)(?::\d+)?$/i.test(hint))
+      if (!localHints.length) {
+        setMsg('This QR points to localhost. Enter the computer’s Wi-Fi address below, then scan the QR again.')
+        return
+      }
+      const pairing = { siteId: p.site, name: p.name, publicKey: p.pk, localHints, pairedAt: Date.now() }
+      const probe = await probeLocal(env, pairing)
+      if (probe.ok) {
         // 2) consume the single-use code; the answer must repeat the pinned key
-        const r = await env.fetch(`${h.url}/api/v1/site-pairing/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: p.code, device_name: 'AeroLab phone' }) })
+        const r = await env.fetch(`${probe.baseUrl}/api/v1/site-pairing/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: p.code, device_name: 'AeroLab phone' }) })
         if (!r.ok) { setMsg(r.status === 401 ? 'That pairing code is invalid or expired. Ask an administrator for a new one.' : 'Pairing failed. Try again with a new code.'); setBusy(false); return }
         const body = await r.json() as { site_id: string; public_key: string }
         if (body.site_id !== p.site || body.public_key !== p.pk) { setMsg('The site did not match the pairing code. Nothing was saved.'); setBusy(false); return }
-        await addPairing({ siteId: p.site, name: p.name, publicKey: p.pk, localHints: p.hints, pairedAt: Date.now() })
+        await addPairing(pairing)
         setBusy(false); done(); return
       }
-      setMsg('Could not verify the site. Check that this phone is on the site Wi-Fi, then try again. Nothing was sent.')
+      setMsg(probe.reason === 'LOCAL_IDENTITY_MISMATCH'
+        ? 'The site responded, but its identity did not match the QR. Generate a fresh QR from that site.'
+        : `Could not reach the site at ${localHints[0]}. Open that address in Chrome to check the connection.`)
     } catch (e) { setMsg(e instanceof PairingError ? e.message : 'Pairing failed. Try again with a new code.') }
-    setBusy(false)
-  }, [env, addPairing, done])
+    finally { setBusy(false) }
+  }, [env, addPairing, done, siteAddress])
   return <Screen>
     <PageTitle title="Pair a site" />
-    <Text style={s.muted}>On the site, an administrator opens Administration → Phone pairing to show a QR code (valid 5 minutes, single use). Join the site Wi-Fi first.</Text>
+    <Text style={s.muted}>Scan a QR from Administration → Phone pairing. Codes expire after five minutes.</Text>
     <Segmented label="Pairing method" value={manual ? 'text' : 'camera'} onChange={v => setManual(v === 'text')} options={[['camera', 'Scan QR code'], ['text', 'Enter text']]} />
+    <View>
+      <Text style={s.fieldLabel}>Site address (optional)</Text>
+      <TextInput style={s.input} value={siteAddress} onChangeText={setSiteAddress} placeholder="http://site-address:8080"
+        placeholderTextColor={c.muted} autoCapitalize="none" autoCorrect={false} keyboardType="url" accessibilityLabel="Site address" />
+    </View>
     {!manual && (perm?.granted
       ? <View style={{ height: 300, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: c.line }}><CameraView style={{ flex: 1 }} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={e => { if (!busy) void doPair(e.data) }} /></View>
       : <EmptyState icon="qr" title="Camera access needed">Allow the camera to scan the pairing QR code shown on the site's Administration page.</EmptyState>)}
@@ -413,10 +464,10 @@ export function PairScreen({ done }: { done: () => void }) {
   </Screen>
 }
 
-export function LoginScreen({ done }: { done: () => void }) {
+export function LoginScreen({ done, cloud }: { done: () => void; cloud?: boolean }) {
   const { c, s } = useTheme()
   const { decision, pairing, signedIn, env } = useApp()
-  const wantsCloud = decision?.kind === 'unavailable' && decision.reason === 'CLOUD_LOGIN_REQUIRED'
+  const wantsCloud = cloud || (decision?.kind === 'unavailable' && decision.reason === 'CLOUD_LOGIN_REQUIRED')
   const [source, setSource] = useState<'local' | 'cloud'>(wantsCloud ? 'cloud' : 'local')
   const [u, setU] = useState(''); const [pw, setPw] = useState(''); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false)
   const [touched, setTouched] = useState({ u: false, p: false })
@@ -425,7 +476,7 @@ export function LoginScreen({ done }: { done: () => void }) {
     if (!pairing || !u || !pw) return
     setBusy(true); setErr(null)
     try {
-      let base = pairing.cloudUrl ?? ''
+      let base = acceptableCloudAddress(pairing.cloudUrl ?? '')?.url ?? ''
       if (source === 'local') {
         // find the VERIFIED local address again: credentials only ever go to the paired Pi
         const { probeLocal } = await import('../core/connection'); const pr = await probeLocal(env, pairing)
@@ -443,7 +494,8 @@ export function LoginScreen({ done }: { done: () => void }) {
     <View style={{ paddingVertical: 12 }}><FullLogo width={220} /></View>
     <PageTitle title="Sign in" subtitle={pairing?.name} />
     <Segmented label="Account type" value={source} onChange={v => { setSource(v); setErr(null) }} options={[['local', 'Site (local)'], ['cloud', 'Cloud']]} />
-    <Text style={s.muted}>{source === 'local' ? 'Local accounts work with no internet and are separate from cloud accounts.' : 'Cloud accounts are separate from site accounts.'}</Text>
+    {source === 'cloud' && acceptableCloudAddress(pairing?.cloudUrl ?? '')?.insecureLab &&
+      <Banner tone="warn">This demo connection is unencrypted. Use your demo account on trusted Wi-Fi.</Banner>}
     <View><Text style={s.fieldLabel}>{idLabel}</Text>
       <TextInput style={[s.input, touched.u && !u && { borderColor: c.danger }]} value={u} onChangeText={setU} onBlur={() => setTouched(t => ({ ...t, u: true }))} autoCapitalize="none" autoCorrect={false} keyboardType={source === 'cloud' ? 'email-address' : 'default'} textContentType={source === 'cloud' ? 'emailAddress' : 'username'} accessibilityLabel={idLabel} />
       {touched.u && !u && <Text style={{ color: c.danger, fontSize: 13, marginTop: 4 }}>Enter your {idLabel.toLowerCase()}.</Text>}</View>

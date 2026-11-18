@@ -1,4 +1,4 @@
-import { acceptableHint, newChallenge, verifyIdentity, type IdentityResponse } from './identity'
+import { acceptableCloudAddress, acceptableHint, newChallenge, verifyIdentity, type IdentityResponse } from './identity'
 import type { Decision, Env, Mode, Pairing, Reason, Source } from './types'
 
 export type Probe = { ok: true; baseUrl: string; insecureLab: boolean } | { ok: false; reason: 'LOCAL_UNREACHABLE' | 'LOCAL_IDENTITY_MISMATCH' }
@@ -58,12 +58,13 @@ export async function decide(i: Inputs): Promise<Decision> {
 
   let local: Probe | null = null
   const tryLocal = async () => (local ??= await probeLocal(i.env, i.pairing))
+  const cloud = i.pairing.cloudUrl ? acceptableCloudAddress(i.pairing.cloudUrl) : null
 
   if (i.mode === 'cloud') {
+    if (!cloud) return unavailableOrCached('CLOUD_ONLY_MODE_NO_CLOUD', false, ['cloud'])
     if (!(await i.hasSession('cloud'))) return unavailableOrCached('CLOUD_LOGIN_REQUIRED', false, ['cloud'])
     if (!(await i.cloudReachable())) return unavailableOrCached('CLOUD_UNREACHABLE', false, ['cloud'])
-    if (!i.pairing.cloudUrl) return unavailableOrCached('CLOUD_ONLY_MODE_NO_CLOUD', false, ['cloud'])
-    return { kind: 'live', source: 'cloud', baseUrl: i.pairing.cloudUrl, insecureLab: false, canControl: true, needsLocalLogin: false }
+    return { kind: 'live', source: 'cloud', baseUrl: cloud.url, insecureLab: cloud.insecureLab, canControl: true, needsLocalLogin: false }
   }
 
   const l = await tryLocal()
@@ -76,8 +77,8 @@ export async function decide(i: Inputs): Promise<Decision> {
 
   // auto: local not usable -> cloud, if there is a cloud session and the cloud answers
   const needsLocalLogin = l.ok // local is reachable but we have no local session: offer a login
-  if (i.pairing.cloudUrl && (await i.hasSession('cloud')) && (await i.cloudReachable())) {
-    return { kind: 'live', source: 'cloud', baseUrl: i.pairing.cloudUrl, insecureLab: false, canControl: true, needsLocalLogin: false }
+  if (cloud && (await i.hasSession('cloud')) && (await i.cloudReachable())) {
+    return { kind: 'live', source: 'cloud', baseUrl: cloud.url, insecureLab: cloud.insecureLab, canControl: true, needsLocalLogin: false }
   }
   const reason: Reason = l.ok ? 'LOCAL_LOGIN_REQUIRED' : l.reason === 'LOCAL_IDENTITY_MISMATCH' ? 'LOCAL_IDENTITY_MISMATCH' : 'NO_SOURCE_AVAILABLE'
   return unavailableOrCached(reason, needsLocalLogin, ['local', 'cloud'])

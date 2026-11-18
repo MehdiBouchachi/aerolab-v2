@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useFetch } from '../app/hooks'
 import type { Command, CropProfile, History, Incident, Program, Unit } from '../api/types'
-import { ago, clock, label, showReading, unitStatus } from '../app/format'
+import { ago, clock, incidentTitle, label, showReading, unitStatus } from '../app/format'
 import { Badge, Empty, ErrorNote, Loading, Sim } from '../components/ui'
 import { HistoryCompare } from '../components/HistoryCompare'
 import { ProgramEditor } from './ProgramEditor'
@@ -61,8 +61,36 @@ export function UnitPage() {
       </section>
 
       {inc.data && inc.data.incidents.length > 0 && (
-        <section><h2>Active alerts for this unit</h2>
-          <ul className="alerts">{inc.data.incidents.map(i => <li key={i.id} className={i.severity}><Badge tone={i.severity === 'critical' ? 'crit' : 'warn'}>{i.severity}</Badge> <b>{i.title}</b><div>{i.cause}</div><div className="muted">What to do: {i.suggested_action}</div></li>)}</ul></section>)}
+        <section aria-labelledby="unit-alerts-title">
+          <div className="unit-section-heading"><h2 id="unit-alerts-title">Active alerts</h2></div>
+          <ul className="incident-list incident-list-surface">
+            {inc.data.incidents.map(i => {
+              const tone = i.severity === 'critical' ? 'crit' : i.severity === 'warning' ? 'warn' : 'muted'
+              return <li key={i.id} className="incident-entry">
+                <div className="incident-entry-header">
+                  <div>
+                    <h2>{incidentTitle(i.title)}</h2>
+                    <div className="incident-entry-meta">
+                      <span>Last seen {ago(i.last_seen_at)}</span>
+                      {i.acknowledged_at && <span>Acknowledged</span>}
+                    </div>
+                  </div>
+                  <Badge tone={tone}>{tone === 'crit' ? 'Critical' : tone === 'warn' ? 'Warning' : 'Info'}</Badge>
+                </div>
+                <div className="incident-entry-actions">
+                  <details>
+                    <summary>Alert details</summary>
+                    <div className="incident-entry-detail">
+                      <div><strong>Suggested action</strong><p>{i.suggested_action}</p></div>
+                      <div><strong>Cause</strong><p>{i.cause}</p></div>
+                      {i.note && <p>{i.note}</p>}
+                    </div>
+                  </details>
+                </div>
+              </li>
+            })}
+          </ul>
+        </section>)}
 
       <div className="unit-section-heading"><h2>Current readings</h2>{r && <span className="muted small">Taken {ago(r.effective_at_utc)}{r.outdated && <b className="danger-text"> · OUTDATED</b>}</span>}</div>
       {!r ? <Empty>No readings have been stored for this unit yet.</Empty> : (

@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import * as ed from '@noble/ed25519'
 import { readFileSync } from 'node:fs'
-import { acceptableHint, b64urlEncode, newChallenge, parsePairingPayload, PairingError, verifyIdentity } from './identity'
+import { acceptableCloudAddress, acceptableHint, b64urlEncode, newChallenge, parsePairingPayload, PairingError, verifyIdentity } from './identity'
 import { decide, probeLocal } from './connection'
 import { MemoryStore, NamespacedCache, TokenStore } from './store'
 import { ApiFailure, freshnessLabel, SourceSession } from './session'
@@ -49,6 +49,13 @@ describe('identity (cross-language contract with the Go Pi)', () => {
     const v = JSON.parse(readFileSync(new URL('../../../../contracts/examples/identity.vector.json', import.meta.url), 'utf8'))
     expect(verifyIdentity({ siteId: v.site_id, publicKey: v.public_key }, v.challenge, { site_id: v.site_id, public_key: v.public_key, signature: v.signature })).toBe(true)
   })
+  it('verifies a site challenge without a global TextEncoder', () => {
+    const challenge = newChallenge(rnd())
+    const answer = PI.answer(challenge)
+    vi.stubGlobal('TextEncoder', undefined)
+    try { expect(verifyIdentity(pairing(), challenge, answer)).toBe(true) }
+    finally { vi.unstubAllGlobals() }
+  })
   it('rejects every kind of wrong answer', () => {
     const v = JSON.parse(readFileSync(new URL('../../../../contracts/examples/identity.vector.json', import.meta.url), 'utf8'))
     const p = { siteId: v.site_id, publicKey: v.public_key }, ok = { site_id: v.site_id, public_key: v.public_key, signature: v.signature }
@@ -81,6 +88,13 @@ describe('pairing QR payload (untrusted input)', () => {
     expect(acceptableHint('http://aerolab.local')?.insecureLab).toBe(true)
     expect(acceptableHint('http://user:pw@192.168.1.1')).toBeNull()
   })
+})
+
+it('permits unencrypted cloud sign-in only at private IPv4 demo addresses', () => {
+  expect(acceptableCloudAddress('http://192.168.100.33:8090')).toEqual({ url: 'http://192.168.100.33:8090', insecureLab: true })
+  expect(acceptableCloudAddress('http://localhost:8090')).toBeNull()
+  expect(acceptableCloudAddress('http://example.org')).toBeNull()
+  expect(acceptableCloudAddress('https://example.org')?.insecureLab).toBe(false)
 })
 
 describe('probeLocal', () => {

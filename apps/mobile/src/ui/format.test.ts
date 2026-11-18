@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { ago, paths, scaleOf, segments, seriesOf, showReading, unitStatus } from './format'
 
 describe('paths follow the source', () => {
+  it('routes site-owned tools through the cloud edge relay', () => {
+    expect(paths('local', 'S1').crops).toBe('/api/v1/sites/S1/crop-profiles')
+    expect(paths('local', 'S1').addUnit).toBe('/api/v1/sites/S1/units')
+    const cloud = paths('cloud', 'S1')
+    expect(cloud.crops).toBe('/api/v1/sites/S1/edge/sites/S1/crop-profiles')
+    expect(cloud.addUnit).toBe('/api/v1/sites/S1/edge/sites/S1/units')
+    expect(cloud.acknowledge('a1')).toBe('/api/v1/sites/S1/edge/incidents/a1/acknowledge')
+    expect(cloud.incidents('active', 100, 'unit/1')).toContain('unit_id=unit%2F1')
+  })
   it('local (edge) unit resources are not site-scoped', () => {
     const p = paths('local', 'S1')
     expect(p.unit('u1')).toBe('/api/v1/units/u1')

@@ -16,17 +16,26 @@ export function usePaths() {
   return paths(useSource(), pairing?.siteId ?? '')
 }
 
+export function useSiteCapabilities() {
+  const { decision } = useApp()
+  const { session } = usePaths()
+  return useResource<{ capabilities: string[] }>(decision?.kind === 'live' ? session : null)
+}
+
 /** Loads one resource from the CURRENT source; falls back to that source's own cache, clearly marked. */
 export function useResource<T>(path: string | null, intervalMs = 10000) {
-  const { session, decision } = useApp()
+  const { session, decision, pairing, userId } = useApp()
+  const connection = decision?.kind
+  const scope = JSON.stringify([pairing?.siteId, userId, decision?.kind === 'live' ? decision.source : decision?.kind === 'cached' ? decision.cachedFrom : null,
+    decision?.kind === 'live' ? decision.baseUrl : null])
   const [r, setR] = useState<Reading<T> | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const load = useCallback(async () => {
-    if (!path || !decision) return
+    if (!path || !connection) return
     setLoading(true)
     try {
-      if (decision.kind === 'live') setR(await session.get<T>(path))
+      if (connection === 'live') setR(await session.get<T>(path))
       else setR(await session.cached<T>(path))
       setErr(null)
     } catch (e) {
@@ -34,7 +43,7 @@ export function useResource<T>(path: string | null, intervalMs = 10000) {
       setErr(e instanceof ApiFailure ? e.message : 'Failed to load')
       setR(await session.cached<T>(path)) // keep showing the last good copy, flagged as cached
     } finally { setLoading(false) }
-  }, [path, decision, session])
+  }, [path, connection, scope, session])
   useEffect(() => {
     setR(null); void load()
     if (!intervalMs) return

@@ -5,8 +5,8 @@ import { useApp } from '../app/context'
 import { useFetch } from '../app/hooks'
 import type { Incident } from '../api/types'
 import { P } from '../api/paths'
-import { ago, clock } from '../app/format'
-import { ErrorNote, Loading } from '../components/ui'
+import { ago, clock, incidentTitle } from '../app/format'
+import { Badge, ErrorNote, Loading } from '../components/ui'
 import { Icon } from '../components/Icon'
 
 export function Incidents() {
@@ -47,38 +47,39 @@ export function Incidents() {
         </div>
       )}
 
-      {list.data && list.data.incidents.length > 0 && <ul className="incident-list">
+      {list.data && list.data.incidents.length > 0 && <ul className="incident-list incident-list-surface">
         {list.data.incidents.map(i => (
-          <li key={i.id} className={`incident-item ${i.severity}`}>
-            <div className="incident-head">
-              <div className="incident-title">
-                <span className="incident-severity-icon"><Icon name={i.severity === 'critical' ? 'critical' : i.severity === 'warning' ? 'warning' : 'alerts'} size={19} /></span>
-                <div>
-                  <div className="incident-labels"><span className={`incident-severity ${i.severity}`}>{i.severity}</span><span className="incident-code">{i.code.replace(/_/g, ' ')}</span></div>
-                  <h2>{i.title}</h2>
+          <li key={i.id} className="incident-entry">
+            <div className="incident-entry-header">
+              <div>
+                <h2>{incidentTitle(i.title)}</h2>
+                <div className="incident-entry-meta">
+                  <Link to={`/units/${i.unit_id}`}>View unit <Icon name="arrow" size={13} /></Link>
+                  <span>{i.resolved_at ? `Resolved ${ago(i.resolved_at)}` : `Last seen ${ago(i.last_seen_at)}`}</span>
+                  {i.acknowledged_at && <span>Acknowledged</span>}
                 </div>
               </div>
-              <Link className="incident-unit" to={`/units/${i.unit_id}`}>{i.unit_id}<Icon name="arrow" size={15} /></Link>
+              <Badge tone={i.severity === 'critical' ? 'crit' : i.severity === 'warning' ? 'warn' : 'muted'}>{i.severity === 'critical' ? 'Critical' : i.severity === 'warning' ? 'Warning' : 'Info'}</Badge>
             </div>
-            <div className="incident-body">
-              <div><span className="incident-field-label">Cause</span><p>{i.cause}</p></div>
-              <div><span className="incident-field-label">Suggested action</span><p>{i.suggested_action}</p></div>
-            </div>
-            {i.note && <p className="incident-note">{i.note}</p>}
-            <footer className="incident-footer">
-              <div className="incident-times">
-                <span>First seen {clock(i.first_seen_at)}</span>
-                <span>Last seen {ago(i.last_seen_at)}</span>
-                {i.resolved_at && <span>Resolved {clock(i.resolved_at)}</span>}
-                {i.acknowledged_at && <span>Acknowledged {clock(i.acknowledged_at)}</span>}
-              </div>
+            <div className="incident-entry-actions">
+              <details>
+                <summary>Alert details</summary>
+                <div className="incident-entry-detail">
+                  <div><strong>Suggested action</strong><p>{i.suggested_action}</p></div>
+                  <div><strong>Cause</strong><p>{i.cause}</p></div>
+                  {i.note && <p>{i.note}</p>}
+                  <p className="muted small">First seen {clock(i.first_seen_at)} · {i.unit_id} · {i.code}</p>
+                  {i.resolved_at && <p className="muted small">Resolved {clock(i.resolved_at)}</p>}
+                  {i.acknowledged_at && <p className="muted small">Acknowledged {clock(i.acknowledged_at)}</p>}
+                </div>
+              </details>
               {i.status.endsWith('UNACKNOWLEDGED') && can('ack_incident') && <button type="button" className="secondary" onClick={() => void ack(i.id)}>Acknowledge</button>}
-            </footer>
+            </div>
           </li>
         ))}
       </ul>}
 
-      {state === 'active' && list.data && list.data.incidents.length > 0 &&
+      {state === 'active' && can('ack_incident') && list.data?.incidents.some(i => i.status.endsWith('UNACKNOWLEDGED')) &&
         <p className="incidents-explainer"><Icon name="alerts" size={15} /> Acknowledging marks an alert as seen. The controller resolves it when the fault clears.</p>}
     </section>
   )

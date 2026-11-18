@@ -36,6 +36,14 @@ export function isLabHost(host: string): boolean {
 
 export interface Hint { url: string; insecureLab: boolean }
 
+/** Cloud HTTPS in production, with explicit private IPv4 HTTP for LAN demos. */
+export function acceptableCloudAddress(raw: string): Hint | null {
+  const hint = acceptableHint(raw)
+  if (!hint || !hint.insecureLab) return hint
+  const host = new URL(hint.url).hostname
+  return /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host) ? hint : null
+}
+
 /** Accept https anywhere; http only for private/lab hosts. Never any other scheme, never credentials in the URL. */
 export function acceptableHint(raw: string): Hint | null {
   if (raw.length > 200) return null
@@ -76,7 +84,9 @@ export interface IdentityResponse { site_id: string; public_key: string; signatu
 export function verifyIdentity(p: Pick<Pairing, 'siteId' | 'publicKey'>, challenge: string, r: IdentityResponse): boolean {
   try {
     if (r.site_id !== p.siteId || r.public_key !== p.publicKey) return false
-    const msg = new TextEncoder().encode(MSG_PREFIX + p.siteId + '\n' + challenge)
+    // The wire message is ASCII. Expo Go's JavaScript runtime may lack TextEncoder.
+    if (!ID_RE.test(p.siteId) || !/^[A-Za-z0-9_-]+$/.test(challenge)) return false
+    const msg = Uint8Array.from(MSG_PREFIX + p.siteId + '\n' + challenge, char => char.charCodeAt(0))
     return ed.verify(b64urlDecode(r.signature), msg, b64urlDecode(r.public_key))
   } catch { return false }
 }

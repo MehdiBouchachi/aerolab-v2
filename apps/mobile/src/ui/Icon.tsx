@@ -2,9 +2,10 @@
 import type { ReactNode } from 'react'
 import Svg, { Circle, Path, Rect } from 'react-native-svg'
 
-export type IconName = 'overview' | 'alerts' | 'admin' | 'sun' | 'moon' | 'activity' | 'wifi' | 'clock' | 'warning' | 'critical' | 'arrow' | 'check' | 'back' | 'chevron' | 'cloud' | 'qr' | 'settings'
+export type IconName = 'overview' | 'alerts' | 'admin' | 'sun' | 'moon' | 'activity' | 'wifi' | 'clock' | 'warning' | 'critical' | 'arrow' | 'check' | 'back' | 'chevron' | 'cloud' | 'qr' | 'settings' | 'beaker'
 
 const paths: Record<IconName, ReactNode> = {
+  beaker: <Path d="M9 3h6m-5 0v7L5 19a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7 17h10" />,
   overview: <><Rect x="3" y="3" width="7" height="7" rx="1" /><Rect x="14" y="3" width="7" height="7" rx="1" /><Rect x="3" y="14" width="7" height="7" rx="1" /><Rect x="14" y="14" width="7" height="7" rx="1" /></>,
   alerts: <><Path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" /><Path d="M10 21h4" /></>,
   admin: <><Circle cx="12" cy="8" r="4" /><Path d="M4 21a8 8 0 0 1 16 0" /></>,
