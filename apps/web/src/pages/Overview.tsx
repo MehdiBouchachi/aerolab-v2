@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../app/context'
 import { useFetch } from '../app/hooks'
@@ -10,14 +11,18 @@ const KEYS = ['water_temp_c', 'ph', 'ec_ms_cm', 'reservoir_level_ok']
 // Phone cards show the four readings in one row, so they need short names.
 const SHORT: Record<string, string> = { water_temp_c: 'Water', ph: 'pH', ec_ms_cm: 'EC', reservoir_level_ok: 'Reservoir' }
 
-export function Overview() {
+export function Overview({ children }: { children?: ReactNode }) {
   const { session, can } = useApp(); const site = session!.site!.id
   const units = useFetch<{ units: Unit[]; total: number }>(`/api/v1/sites/${site}/units?limit=100`, ['unit.state', 'unit.reading', 'incident.updated', 'program.updated'])
   const sum = useFetch<Summary>(`/api/v1/sites/${site}/summary`, ['unit.state', 'incident.updated'])
   const inc = useFetch<{ incidents: Incident[] }>(`/api/v1/sites/${site}/incidents?state=active`, ['incident.updated'])
   const s = sum.data
   return <div className="overview-page">
-    <div className="page-heading"><div><h1>Overview</h1><p className="muted">{session!.site!.name}</p></div></div>
+    {children}
+    <header className="page-heading">
+      <div><h1>Overview</h1><p className="muted">{session!.site!.name}</p></div>
+      {can('manage_devices') && <Link className="btn overview-add-unit" to="/units/new">Add a unit</Link>}
+    </header>
     <ErrorNote error={units.error ?? sum.error} retry={() => { units.reload(); sum.reload() }} />
     {s && <section className="tiles" aria-label="Site summary">
       <div className="tile"><b>{s.units.total}</b><span>Total units</span></div>
@@ -26,7 +31,7 @@ export function Overview() {
       <div className={`tile ${s.active_incidents.critical ? 'crit' : ''}`}><b>{s.active_incidents.critical}</b><span>Critical alerts</span></div>
     </section>}
     {inc.data && inc.data.incidents.length > 0 && <section aria-label="Active alerts"><h2>Active alerts</h2><ul className="alerts">{inc.data.incidents.slice(0, 5).map(i => <li key={i.id} className={i.severity}><Badge tone={i.severity === 'critical' ? 'crit' : 'warn'}>{i.severity}</Badge> <b>{i.title}</b> — <Link to={`/units/${i.unit_id}`}>{i.unit_id}</Link><div className="muted">{i.suggested_action}</div></li>)}</ul><Link to="/incidents">All alerts →</Link></section>}
-    <div className="section-heading"><h2>Growing units</h2><span className="muted small">{units.data ? `${units.data.units.length} units` : 'Loading units'}</span>{can('manage_devices') && <Link className="btn" to="/units/new">Add a unit</Link>}</div>
+    <div className="section-heading"><h2>Growing units</h2></div>
     {units.loading && <Loading what="units" />}
     {units.data && units.data.units.length === 0 && <Empty>No units yet.{can('manage_devices') ? ' Use “Add a unit” to connect your first controller.' : ' An administrator can add them.'}</Empty>}
     <div className="cards">{units.data?.units.map(u => {

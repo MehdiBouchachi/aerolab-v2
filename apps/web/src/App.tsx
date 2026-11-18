@@ -31,7 +31,7 @@ function Gate() {
       <Route element={<Shell />}>
         {IS_CLOUD ? <><Route index element={<Page><Fleet /></Page>} /><Route path="site" element={<Overview />} /></> : <Route index element={<Overview />} />}
         <Route path="crops" element={<Page><Crops /></Page>} />
-        <Route path="units/new" element={<Page><AddUnit /></Page>} />
+        <Route path="units/new" element={<Overview><Page><AddUnit /></Page></Overview>} />
         <Route path="units/:unitId" element={<Page><UnitPage /></Page>} />
         <Route path="incidents" element={<Incidents />} />
         <Route path="admin" element={<Page><Admin /></Page>} />

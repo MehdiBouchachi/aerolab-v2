@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
 import { useApp } from '../app/context'
@@ -6,6 +6,7 @@ import { useFetch } from '../app/hooks'
 import type { LinkInfo, Role, StorageInfo } from '../api/types'
 import { bytes, clock } from '../app/format'
 import { ErrorNote, Loading } from '../components/ui'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { IS_CLOUD, P } from '../api/paths'
 import QRCode from 'qrcode'
@@ -31,8 +32,18 @@ export function Admin() {
   const audit = useFetch<{ events: { id: string; actor_id: string; action: string; target_type: string; occurred_at: string }[] }>(view === 'activity' ? P.site(site, `/api/v1/sites/${site}/audit?limit=20`) : null, [], 20000)
   const [userQuery, setUserQuery] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<ApiError | null>(null)
+  const createDialog = useRef<HTMLDialogElement>(null)
   const [busyUser, setBusyUser] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<Member | null>(null)
   useEffect(() => { window.scrollTo(0, 0) }, [view])
+  useEffect(() => {
+    if (!showCreate || view !== 'users') return
+    const dialog = createDialog.current
+    dialog?.showModal()
+    return () => dialog?.close()
+  }, [showCreate, view])
   if (!can('manage_users')) return <p>Administration is available to administrators only.</p>
 
   const startPairing = async () => {
@@ -42,16 +53,26 @@ export function Admin() {
       setPair({ code: r.code, expires: r.expires_at, payload: r.qr_payload, qr: await QRCode.toDataURL(r.qr_payload, { margin: 1, width: 280 }) })
     } catch (x) { setErr(x as ApiError) }
   }
+  const closeCreate = () => {
+    setShowCreate(false)
+    setCreateError(null)
+    setUserErrors({})
+    setNu({ username: '', password: '', role: 'VIEWER' })
+  }
   const create = async (e: FormEvent) => {
-    e.preventDefault(); setErr(null)
+    e.preventDefault()
+    if (creating) return
+    setCreateError(null)
     const errors = {
       username: nu.username.trim().length < 3 ? 'Enter at least 3 characters.' : undefined,
       password: nu.password.length < 12 ? 'Enter at least 12 characters.' : undefined,
     }
     setUserErrors(errors)
     if (errors.username || errors.password) return
-    try { await api('POST', '/api/v1/local/users', { ...nu, username: nu.username.trim() }); setNu({ username: '', password: '', role: 'VIEWER' }); setShowCreate(false); users.reload() }
-    catch (x) { setErr(x as ApiError) }
+    setCreating(true)
+    try { await api('POST', '/api/v1/local/users', { ...nu, username: nu.username.trim() }); closeCreate(); users.reload() }
+    catch (x) { setCreateError(x as ApiError) }
+    finally { setCreating(false) }
   }
   const patch = async (id: string, body: object) => {
     setErr(null); setBusyUser(id)
@@ -59,9 +80,9 @@ export function Admin() {
     catch (x) { setErr(x as ApiError) }
     finally { setBusyUser(null) }
   }
-  const setMember = async (id: string, role: Role | null) => {
+  const setMember = async (id: string, role: Role) => {
     setErr(null); setBusyUser(id)
-    try { await api(role ? 'PUT' : 'DELETE', `/api/v1/sites/${site}/members/${id}`, role ? { role } : undefined); members.reload() }
+    try { await api('PUT', `/api/v1/sites/${site}/members/${id}`, { role }); members.reload() }
     catch (x) { setErr(x as ApiError) }
     finally { setBusyUser(null) }
   }
@@ -84,12 +105,14 @@ export function Admin() {
         <Link to="?view=activity" aria-current={view === 'activity' ? 'page' : undefined}>Activity</Link>
       </nav>
       <ErrorNote error={err} />
+      {removing && <ConfirmDialog title={`Remove ${removing.email}?`} description="This person will lose access to this site." confirmLabel="Remove access"
+        onConfirm={async () => { await api('DELETE', `/api/v1/sites/${site}/members/${removing.user_id}`); members.reload() }} onClose={() => setRemoving(null)} />}
 
       {view === 'storage' && <section className="admin-section">
         <div className="admin-section-head"><h2>Storage and sync</h2></div>
         <ErrorNote error={storage.error} retry={storage.reload} />
         {storage.loading && <Loading what="storage" />}
-        {s && <div className="admin-surface">
+        {s && <div className="admin-surface admin-storage">
           <div className={`admin-health ${storageTone}`}>
             <div className="admin-health-title"><Icon name={storageTone === 'normal' ? 'check' : 'warning'} size={17} />
               <strong>{storageTone === 'normal' ? 'Storage operating normally' : s.status === 'LOW_SPACE' ? 'Disk space is low' : 'Storage needs attention'}</strong>
@@ -98,7 +121,15 @@ export function Admin() {
           </div>
           <dl className="admin-facts">
             <div><dt>Database</dt><dd>{bytes(s.database_bytes)} <span>+ {bytes(s.wal_bytes)} log</span></dd></div>
-            <div><dt>Free disk</dt><dd>{bytes(s.disk_free_bytes)} <span>of {bytes(s.disk_total_bytes)}</span></dd></div>
+            <div>
+              <dt>Free disk</dt>
+              <dd>
+                {bytes(s.disk_free_bytes)}
+                <span>of {bytes(s.disk_total_bytes)}</span>
+                {s.disk_total_bytes > 0 && s.disk_free_bytes >= 0 && s.disk_free_bytes <= s.disk_total_bytes &&
+                  <meter aria-label="Free disk space" min={0} max={s.disk_total_bytes} value={s.disk_free_bytes} />}
+              </dd>
+            </div>
             <div><dt>Stored snapshots</dt><dd>{s.telemetry_rows.toLocaleString()} <span>retained {s.retention_days} days</span></dd></div>
             <div><dt>Cloud sync</dt><dd>{s.cloud_sync.enabled ? `On · ${s.cloud_sync.outbox_pending} waiting` : 'Off'} <span>{!s.cloud_sync.enabled && 'site runs offline'}</span></dd></div>
           </dl>
@@ -122,7 +153,7 @@ export function Admin() {
           {members.data.members.map(m => <tr key={m.user_id}>
             <td data-label="User" className="admin-strong">{m.email}</td>
             <td data-label="Role"><select aria-label={`Role of ${m.email}`} value={m.role} disabled={busyUser === m.user_id || m.user_id === session?.user?.id} onChange={e => void setMember(m.user_id, e.target.value as Role)}>{(['ADMIN', 'OPERATOR', 'VIEWER'] as Role[]).map(r => <option key={r}>{r}</option>)}</select></td>
-            <td data-label="Action">{m.user_id !== session?.user?.id && <button type="button" className="danger" disabled={busyUser === m.user_id} onClick={() => { if (window.confirm(`Remove ${m.email} from this site?`)) void setMember(m.user_id, null) }}>Remove {m.email}</button>}</td>
+            <td data-label="Action">{m.user_id !== session?.user?.id && <button type="button" className="danger" disabled={busyUser === m.user_id} onClick={() => setRemoving(m)}>Remove {m.email}</button>}</td>
           </tr>)}
         </tbody></table>{members.data.members.length === 0 && <p className="admin-table-empty">No members.</p>}</div>}
       </section>}
@@ -133,17 +164,24 @@ export function Admin() {
         {users.loading && <Loading what="accounts" />}
         <div className="admin-user-toolbar">
           <label className="admin-user-search">Search users<input type="search" value={userQuery} onChange={e => setUserQuery(e.target.value)} placeholder="Search by username" /></label>
-          <button type="button" className={showCreate ? 'secondary' : 'primary'} aria-expanded={showCreate} aria-controls="admin-create-user" onClick={() => setShowCreate(v => !v)}>{showCreate ? 'Cancel' : 'Add user'}</button>
+          <button type="button" className="primary" aria-haspopup="dialog" onClick={() => setShowCreate(true)}>Add user</button>
         </div>
-        {showCreate && <form id="admin-create-user" onSubmit={create} noValidate className="admin-create" aria-label="Add user">
-          <div className="admin-create-heading"><h3>New user</h3><p>Create a local account for this site.</p></div>
-          <div className="admin-create-fields">
+        {showCreate && <dialog ref={createDialog} className="app-modal-dialog unit-action-dialog" aria-labelledby="admin-create-title"
+          onCancel={event => { event.preventDefault(); if (!creating) closeCreate() }}>
+          <form onSubmit={create} noValidate className="app-modal-form">
+          <header className="app-modal-header"><h2 id="admin-create-title">New user</h2></header>
+          <div className="app-modal-body add-unit-fields">
+            <ErrorNote error={createError} />
             <label>Username<input value={nu.username} onChange={e => { setNu({ ...nu, username: e.target.value }); setUserErrors(v => ({ ...v, username: undefined })) }} required minLength={3} autoComplete="off" aria-invalid={!!userErrors.username} aria-describedby={userErrors.username ? 'new-user-name-error' : undefined} />{userErrors.username && <span id="new-user-name-error" className="field-error">{userErrors.username}</span>}</label>
             <label>Password <span className="admin-label-hint">12+ characters</span><input type="password" value={nu.password} onChange={e => { setNu({ ...nu, password: e.target.value }); setUserErrors(v => ({ ...v, password: undefined })) }} required minLength={12} autoComplete="new-password" aria-invalid={!!userErrors.password} aria-describedby={userErrors.password ? 'new-user-password-error' : undefined} />{userErrors.password && <span id="new-user-password-error" className="field-error">{userErrors.password}</span>}</label>
             <label>Role<select value={nu.role} onChange={e => setNu({ ...nu, role: e.target.value as Role })}><option>VIEWER</option><option>OPERATOR</option><option>ADMIN</option></select></label>
           </div>
-          <div className="admin-create-actions"><button type="submit" className="primary">Create user</button></div>
-        </form>}
+          <footer className="app-modal-footer">
+            <button type="button" disabled={creating} onClick={closeCreate}>Cancel</button>
+            <button type="submit" className="primary" disabled={creating}>{creating ? 'Creating…' : 'Create user'}</button>
+          </footer>
+          </form>
+        </dialog>}
         {users.data && <div className="admin-table-wrap"><table className="admin-table accounts-table"><thead><tr><th>User</th><th>Role</th><th>Status</th><th><span className="sr-only">Action</span></th></tr></thead><tbody>
           {visibleUsers.map(u => <tr key={u.id}>
             <td data-label="User" className="admin-strong">{u.username}</td>
@@ -181,26 +219,29 @@ function CloudLink() {
   const [err, setErr] = useState<ApiError | null>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
   const link = l.data?.link
   const connect = async (e: FormEvent) => {
     e.preventDefault(); setBusy(true); setErr(null); setNote('')
     try { const r = await api<{ note: string }>('POST', '/api/v1/cloud-link', f); setNote(r.note); setF({ cloud_url: '', code: '' }); l.reload() } catch (x) { setErr(x as ApiError) } finally { setBusy(false) }
   }
   const disconnect = async () => {
-    if (!window.confirm('Disconnect this Pi from the cloud? It keeps working locally; the cloud stops receiving updates.')) return
     setErr(null)
-    try { await api('DELETE', '/api/v1/cloud-link'); l.reload() } catch (x) { setErr(x as ApiError) }
+    await api('DELETE', '/api/v1/cloud-link')
+    l.reload()
   }
   return (<>
     <h2>Cloud connection</h2>
     <p className="muted small">Optional. Connecting lets you see this Pi next to your other Pis from anywhere. The site keeps irrigating and recording without it.</p>
     <ErrorNote error={err ?? l.error} />
+    {confirmDisconnect && <ConfirmDialog title="Disconnect from the cloud?" description="This Pi keeps working locally. The cloud stops receiving updates." confirmLabel="Disconnect"
+      onConfirm={disconnect} onClose={() => setConfirmDisconnect(false)} />}
     {note && <p className="note ok">{note}</p>}
     {link?.linked ? (
       <div className="panel">
         <p>Connected to <b>{link.url}</b>{link.organization_name && <> · organisation <b>{link.organization_name}</b></>}.</p>
         <p className="muted small">Last sync: {l.data?.sync.last_sync_at ? clock(l.data.sync.last_sync_at) : 'not yet'}{l.data?.sync.reachable === false && ' · cloud currently unreachable (data is queued)'}</p>
-        {link.configured_by_installer ? <p className="muted small">Set by the installer; change it in the Pi's configuration.</p> : <button onClick={() => void disconnect()}>Disconnect from the cloud</button>}
+        {link.configured_by_installer ? <p className="muted small">Set by the installer; change it in the Pi's configuration.</p> : <button onClick={() => setConfirmDisconnect(true)}>Disconnect from the cloud</button>}
       </div>
     ) : (
       <form className="inline-form" onSubmit={connect} aria-label="Connect to cloud">

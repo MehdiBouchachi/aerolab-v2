@@ -108,7 +108,7 @@ html { -webkit-tap-highlight-color: transparent; }
   .admin-index { gap: .4rem; margin: .9rem -1rem 1.1rem; padding: 0 1rem .1rem; border: 0; scrollbar-width: none; }
   .admin-index::-webkit-scrollbar { display: none; }
   .admin-index a, .admin-index a[aria-current=page] { display: inline-flex; align-items: center; min-height: 36px; padding: 0 .85rem; border: 1px solid var(--line); border-radius: 99px; background: var(--panel); color: var(--muted); font-size: .8rem; }
-  .admin-index a[aria-current=page] { border-color: var(--brand); background: var(--brand); color: var(--button-ink, #fff); }
+  .admin-index a[aria-current=page] { border-color: var(--button-fill); background: var(--button-fill); color: var(--button-ink); }
 
   /* ---------- Unit page ---------- */
   .unit-page-title h1 { font-size: 1.45rem; }

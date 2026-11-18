@@ -33,7 +33,7 @@ export function Btn({ label, onPress, kind = 'secondary', disabled, icon, style 
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
     style={({ pressed }) => [{
       minHeight: kind === 'link' ? 36 : 48, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: kind === 'link' ? 'flex-start' : 'center', gap: 8, paddingHorizontal: kind === 'link' ? 0 : 16,
-      backgroundColor: kind === 'primary' ? c.brand : kind === 'link' ? 'transparent' : c.panel,
+      backgroundColor: kind === 'primary' ? (pressed ? c.buttonHover : c.buttonFill) : kind === 'link' ? 'transparent' : c.panel,
       borderWidth: kind === 'primary' || kind === 'link' ? 0 : 1, borderColor: c.line,
       opacity: disabled ? 0.55 : pressed ? 0.8 : 1,
     }, style]}>
@@ -42,14 +42,14 @@ export function Btn({ label, onPress, kind = 'secondary', disabled, icon, style 
   </Pressable>
 }
 
-/** iOS-style segmented control: the web uses the same treatment for unit sections and alert filters on phones. */
+/** Section navigation shares the web dashboard's neutral selection pill. */
 export function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: [T, string][]; onChange: (v: T) => void; label: string }) {
   const { c } = useTheme()
-  return <View accessibilityRole="tablist" accessibilityLabel={label} style={{ flexDirection: 'row', padding: 3, gap: 2, borderRadius: 10, backgroundColor: c.segTrack }}>
+  return <View accessibilityRole="tablist" accessibilityLabel={label} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
     {options.map(([v, l]) => {
       const on = v === value
       return <Pressable key={v} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => onChange(v)}
-        style={{ flex: 1, minHeight: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? c.segActive : 'transparent', shadowColor: '#0b1220', shadowOpacity: on ? 0.12 : 0, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: on ? 1 : 0 }}>
+        style={({ pressed }) => ({ minHeight: 44, paddingHorizontal: 12, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: on || pressed ? c.segActive : 'transparent' })}>
         <Text style={{ fontSize: 13.5, fontWeight: '600', color: on ? c.ink : c.muted }}>{l}</Text>
       </Pressable>
     })}
@@ -85,9 +85,9 @@ export function SectionHeading({ title, right }: { title: string; right?: string
 
 export function EmptyState({ icon, title, children }: { icon: IconName; title: string; children: string }) {
   const { c, s } = useTheme()
-  return <View style={[s.panel, { padding: 18, flexDirection: 'row', gap: 14 }]}>
-    <View style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' }}><Icon name={icon} size={21} color={c.brand} /></View>
-    <View style={{ flex: 1, gap: 3 }}><Text style={s.h3}>{title}</Text><Text style={s.muted}>{children}</Text></View>
+  return <View style={[s.panel, { padding: 24, alignItems: 'center', gap: 8 }]}>
+    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center' }}><Icon name={icon} size={21} color={c.muted} /></View>
+    <Text style={[s.h3, { textAlign: 'center' }]}>{title}</Text><Text style={[s.muted, { textAlign: 'center' }]}>{children}</Text>
   </View>
 }
 
@@ -138,11 +138,10 @@ export function TabBar({ tab, onTab, alertCount }: { tab: Tab | null; onTab: (t:
       const on = tab === t
       return <Pressable key={t} accessibilityRole="tab" accessibilityLabel={t === 'alerts' && alertCount ? `${l}, ${alertCount} active` : l} accessibilityState={{ selected: on }} onPress={() => onTab(t)}
         style={({ pressed }) => ({ flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center', gap: 2, opacity: pressed ? 0.7 : 1 })}>
-        {on && <View style={{ position: 'absolute', top: -4, width: '38%', height: 2, borderRadius: 2, backgroundColor: c.brand }} />}
-        <View><Icon name={icon} size={22} color={on ? c.brand : c.muted} />
+        <View style={{ minWidth: 48, paddingVertical: 3, alignItems: 'center', borderRadius: 999, backgroundColor: on ? c.segActive : 'transparent' }}><Icon name={icon} size={22} color={on ? c.ink : c.muted} />
           {t === 'alerts' && alertCount > 0 && <View style={{ position: 'absolute', top: -4, left: 14, minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4, backgroundColor: c.attentionSoft, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 10, fontWeight: '800', color: c.attention }}>{alertCount}</Text></View>}
         </View>
-        <Text style={{ fontSize: 11, fontWeight: on ? '700' : '500', color: on ? c.brand : c.muted }}>{l}</Text>
+        <Text style={{ fontSize: 11, fontWeight: on ? '700' : '500', color: on ? c.ink : c.muted }}>{l}</Text>
       </Pressable>
     })}
   </View>

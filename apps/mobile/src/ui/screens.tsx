@@ -185,16 +185,16 @@ function UnitOverview({ u }: { u: Unit }) {
     </View>
 
     <SectionHeading title="Current readings" right={r ? `Taken ${ago(r.effective_at_utc)}` : undefined} />
-    {!r ? <EmptyState icon="clock" title="No readings yet">No readings have been stored for this unit yet.</EmptyState> : <>
-      <Text style={s.small}>{new Date(r.effective_at_utc).toLocaleString()} · {timeQualityText(r.time_quality)}{r.outdated ? ' · OUTDATED' : ''}</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {orderReadings(r.readings).map(([k, v]) => <View key={k} accessible accessibilityLabel={`${label(k)}: ${showReading(v)}`} style={[s.panel, { width: '48.5%', flexGrow: 1, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 }]}>
+    {!r ? <EmptyState icon="clock" title="No readings yet">No readings have been stored for this unit yet.</EmptyState> : <View style={s.panel}>
+      <Text style={[s.small, { padding: 10, borderBottomWidth: 1, borderBottomColor: c.line }]}>{new Date(r.effective_at_utc).toLocaleString()} · {timeQualityText(r.time_quality)}{r.outdated ? ' · OUTDATED' : ''}</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 4 }}>
+        {orderReadings(r.readings).map(([k, v]) => <View key={k} accessible accessibilityLabel={`${label(k)}: ${showReading(v)}${v.quality !== 'valid' ? `, ${v.quality}` : ''}`} style={{ width: '50%', paddingHorizontal: 10, paddingVertical: 9 }}>
           <Text style={s.muted}>{label(k)}</Text>
           <Text style={{ fontSize: 17, fontWeight: '700', marginTop: 3, color: v.quality === 'valid' ? c.ink : c.muted }}>{showReading(v)}</Text>
           {v.quality !== 'valid' && <Text style={[s.small, { textTransform: 'capitalize' }]}>{v.quality}</Text>}
         </View>)}
       </View>
-    </>}
+    </View>}
   </>
 }
 

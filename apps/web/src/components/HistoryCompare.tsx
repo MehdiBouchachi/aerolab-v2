@@ -4,7 +4,7 @@ import { label, showReading } from '../app/format'
 import { segments, seriesOf } from './Chart'
 
 const METRICS = ['water_temp_c', 'ph', 'ec_ms_cm', 'air_temp_c', 'relative_humidity_pct']
-const W = 640, H = 72, L = 38, R = 8, T = 8, B = 8
+const W = 640, H = 62, L = 38, R = 8, T = 10, B = 10
 
 function MetricRow({ history, name, selected }: { history: History; name: string; selected: HistoryPoint }) {
   const { pts, invalid } = seriesOf(history.points, name)
@@ -48,7 +48,10 @@ export function HistoryCompare({ history }: { history: History }) {
   const middle = new Date((Date.parse(history.from) + Date.parse(history.to)) / 2).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   const end = new Date(history.to).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   return <div className="history-compare" aria-label="Sensor history comparison">
-    <div className="compare-toolbar"><div><strong>Compare one moment</strong><span>{selectedLabel}</span></div><input type="range" min={0} max={history.points.length - 1} value={selectedIndex} disabled={history.points.length < 2} onChange={e => setChosenTime(Date.parse(history.points[Number(e.target.value)].t))} aria-label="Compare readings at time" aria-valuetext={selectedLabel}/></div>
+    <div className="compare-toolbar">
+      <div><strong>Selected time</strong><span>{selectedLabel}</span>{chosenTime !== null && <button type="button" className="link" onClick={() => setChosenTime(null)}>Jump to latest</button>}</div>
+      <input type="range" min={0} max={history.points.length - 1} value={selectedIndex} disabled={history.points.length < 2} onChange={e => setChosenTime(Date.parse(history.points[Number(e.target.value)].t))} aria-label="Compare readings at time" aria-valuetext={selectedLabel}/>
+    </div>
     {METRICS.map(name => <MetricRow key={name} history={history} name={name} selected={selected}/>)}
     <div className="compare-time"><svg viewBox={`0 0 ${W} 24`} role="img" aria-label={`Time axis from ${start} to ${end}`}><text x={L} y="16">{start}</text><text x={L + (W - L - R) / 2} y="16" textAnchor="middle">{middle}</text><text x={W - R} y="16" textAnchor="end">{end}</text></svg></div>
   </div>

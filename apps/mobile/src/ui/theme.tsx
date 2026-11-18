@@ -1,24 +1,21 @@
-// Visual tokens mirror apps/web/src/styles/brand.css (AeroLab V2 identity).
-// Light: #F7FAF8 surface, slate #0F172A ink, deep green #047857 for actions (growth green #22C55E is
-// only 2.3:1 on white, so it stays an accent). Dark: #071B16 surface, #22C55E actions.
-// Amber only for attention; red only for critical.
+// Keep these roles aligned with apps/web/src/styles/brand.css and dashboard.css.
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { StyleSheet, useColorScheme } from 'react-native'
 import { cacheStore } from '../native'
 import { HEADING } from './fonts'
 
 export const light = {
-  bg: '#F7FAF8', panel: '#FFFFFF', ink: '#0F172A', muted: '#4B5D58', line: '#DFE8E3',
-  brand: '#047857', brandSoft: '#E3F5EC', onBrand: '#FFFFFF', accent: '#22C55E',
+  bg: '#F8FAFC', panel: '#FFFFFF', ink: '#0F172A', muted: '#475569', line: '#E2E8F0',
+  brand: '#047857', brandSoft: '#E3F5EC', buttonFill: '#047857', buttonHover: '#065F46', onBrand: '#FFFFFF', accent: '#22C55E',
   attention: '#a76412', attentionSoft: '#fff4e5', danger: '#b23b44', dangerSoft: '#fcecee',
-  segTrack: '#E9F0EC', segActive: '#FFFFFF', backdrop: 'rgba(7,27,22,0.4)',
+  segTrack: '#E2E8F0', segActive: '#ECECEF', backdrop: 'rgba(0,0,0,0.4)',
 }
 export type Palette = typeof light
 export const dark: Palette = {
-  bg: '#071B16', panel: '#0E2621', ink: '#ECF7F1', muted: '#A3BDB4', line: '#20403A',
-  brand: '#22C55E', brandSoft: '#123A2C', onBrand: '#071B16', accent: '#22C55E',
+  bg: '#262626', panel: '#2F2F2F', ink: '#F5F5F5', muted: '#D4D4D4', line: '#404040',
+  brand: '#86C5A3', brandSoft: '#064E3B', buttonFill: '#107348', buttonHover: '#0D6540', onBrand: '#FFFFFF', accent: '#22C55E',
   attention: '#f5c47d', attentionSoft: '#3d3024', danger: '#ffa3a9', dangerSoft: '#422b33',
-  segTrack: '#071B16', segActive: '#1A3A32', backdrop: 'rgba(0,0,0,0.55)',
+  segTrack: '#404040', segActive: '#3F3F3F', backdrop: 'rgba(0,0,0,0.4)',
 }
 
 export type ThemeChoice = 'system' | 'light' | 'dark'
@@ -28,7 +25,7 @@ function makeStyles(c: Palette) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: c.bg },
     pad: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 28, gap: 12 },
-    h1: { fontFamily: HEADING, fontSize: 26, lineHeight: 32, fontWeight: '700', letterSpacing: -0.5, color: c.ink },
+    h1: { fontFamily: HEADING, fontSize: 25, lineHeight: 31, fontWeight: '700', letterSpacing: -0.5, color: c.ink },
     h2: { fontFamily: HEADING, fontSize: 17, fontWeight: '600', letterSpacing: -0.2, color: c.ink },
     h3: { fontFamily: HEADING, fontSize: 16, fontWeight: '600', color: c.ink },
     text: { fontSize: 15, color: c.ink },

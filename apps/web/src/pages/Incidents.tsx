@@ -28,11 +28,10 @@ export function Incidents() {
           <h1 id="alerts-title">Alerts</h1>
           <p className="muted">Controller faults and their resolution history.</p>
         </div>
-        {list.data && <span className="incidents-count">{list.data.incidents.length} {state === 'active' ? 'active' : 'resolved'}</span>}
       </header>
 
       <div className="incidents-tabs" role="group" aria-label="Alert status">
-        <button type="button" aria-pressed={state === 'active'} onClick={() => setState('active')}>Active</button>
+        <button type="button" aria-pressed={state === 'active'} onClick={() => setState('active')}>Active{state === 'active' && list.data && list.data.incidents.length > 0 && <span className="incidents-count">{list.data.incidents.length}</span>}</button>
         <button type="button" aria-pressed={state === 'resolved'} onClick={() => setState('resolved')}>History</button>
       </div>
 
@@ -43,7 +42,7 @@ export function Incidents() {
           <div className="incidents-empty-icon"><Icon name={state === 'active' ? 'check' : 'clock'} size={23} /></div>
           <div>
             <h2>{state === 'active' ? 'No active alerts' : 'No resolved alerts yet'}</h2>
-            <p>{state === 'active' ? 'New controller faults will appear here when they are reported.' : 'Alerts will appear here after the controller stops reporting the fault.'}</p>
+            <p>{state === 'active' ? 'Reported controller faults appear here.' : 'Alerts move here when the controller clears the fault.'}</p>
           </div>
         </div>
       )}
@@ -79,7 +78,8 @@ export function Incidents() {
         ))}
       </ul>}
 
-      <p className="incidents-explainer"><Icon name="alerts" size={15} /> Acknowledging means you have seen an alert. The controller resolves it when the fault clears.</p>
+      {state === 'active' && list.data && list.data.incidents.length > 0 &&
+        <p className="incidents-explainer"><Icon name="alerts" size={15} /> Acknowledging marks an alert as seen. The controller resolves it when the fault clears.</p>}
     </section>
   )
 }

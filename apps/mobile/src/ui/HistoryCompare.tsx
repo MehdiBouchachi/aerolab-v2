@@ -78,14 +78,15 @@ export function HistoryCompare({ history }: { history: History }) {
 
   return <View style={[s.panel, { overflow: 'hidden' }]} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width - 24 - 2)}>
     <View style={{ padding: 12, gap: 8 }}>
-      <View style={s.between}><Text style={s.strong}>Compare one moment</Text><Text style={s.muted}>{when}</Text></View>
+      <View style={[s.between, { flexWrap: 'wrap' }]}><Text style={s.strong}>Selected time</Text><Text style={s.muted}>{when}</Text></View>
+      {idx !== null && <Text accessibilityRole="button" onPress={() => setIdx(null)} style={{ color: c.brand, paddingVertical: 8 }}>Jump to latest</Text>}
       <View {...pan.panHandlers} accessible accessibilityRole="adjustable" accessibilityLabel="Compare readings at time" accessibilityValue={{ text: when }}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={e => setIdx(Math.max(0, Math.min(n - 1, selectedIndex + (e.nativeEvent.actionName === 'increment' ? 1 : -1))))}
         style={{ height: 36, justifyContent: 'center', marginHorizontal: -12, paddingHorizontal: 12 }}>
         <View style={{ height: 4, borderRadius: 2, backgroundColor: c.segTrack }} />
-        <View style={{ position: 'absolute', left: 12, width: Math.max(0, thumbX), height: 4, borderRadius: 2, backgroundColor: c.brand }} />
-        <View style={{ position: 'absolute', left: 12 + thumbX - 11, width: 22, height: 22, borderRadius: 11, backgroundColor: c.panel, borderWidth: 2, borderColor: c.brand, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 2 }} />
+        <View style={{ position: 'absolute', left: 12, width: Math.max(0, thumbX), height: 4, borderRadius: 2, backgroundColor: c.muted }} />
+        <View style={{ position: 'absolute', left: 12 + thumbX - 9, width: 18, height: 18, borderRadius: 9, backgroundColor: c.panel, borderWidth: 2, borderColor: c.muted }} />
       </View>
     </View>
     {METRICS.map(m => <Row key={m} history={history} name={m} selected={selected} width={width} />)}

@@ -73,9 +73,11 @@ export function ProgramEditor({ unit, pending, onChanged }: { unit: Unit; pendin
 
   return (
     <section className="programme-editor" aria-label="Programme editor">
-      <h3>{IS_CLOUD ? 'Request new timing' : 'Set irrigation timing'}</h3>{IS_CLOUD && <p className="muted small">This is a <b>request</b>. The site re-checks it and the controller must confirm; it is never applied directly from the cloud.</p>}
-      <p className="programme-guidance muted small">Use timing values approved for your crop. A change takes effect only after controller confirmation.</p>
-      <div className="programme-context"><span>Current version <b>{applied || 'none'}</b></span><span>Proposed version <b>{applied + 1}</b></span></div>
+      <header className="programme-editor-heading">
+        <h3>{IS_CLOUD ? 'Request new timing' : 'Set irrigation timing'}</h3>
+        <div className="programme-context"><span>Current version <b>{applied || 'none'}</b></span><span>Proposed version <b>{applied + 1}</b></span></div>
+      </header>
+      <p className="programme-guidance muted small">Use timing approved for your crop. Changes take effect after the controller confirms them.</p>
       {cmd && (
         <div className={`note ${COMMAND_TEXT[cmd.status].tone}`} role="status">
           <Badge tone={COMMAND_TEXT[cmd.status].tone}>{COMMAND_TEXT[cmd.status].text}</Badge>
@@ -85,8 +87,12 @@ export function ProgramEditor({ unit, pending, onChanged }: { unit: Unit; pendin
         </div>)}
       {err && <div className="note error" role="alert">{err.code === 'PROGRAM_VERSION_CONFLICT' ? `The controller already runs version ${String(err.details.actual_version)}. Review the current programme and try again.` : err.message}</div>}
       <fieldset disabled={inflight || busy}>
-        <div className="programme-form-group"><h4>Cycle timing</h4><div className="duration-grid">{field('on', 'Pump on', 'Run time · 1–3,600 seconds')}{field('off', 'Pump off', 'Pause time · 1–86,400 seconds')}</div></div>
-        <div className="programme-form-group safety"><h4>Safety limit</h4><div className="duration-grid">{field('max', 'Maximum continuous on', 'At least pump-on time · 1–3,600 seconds')}<div className="protection-note"><Icon name="check" size={17} /><div><strong>Reservoir protection</strong><span>Always on. It cannot be switched off.</span></div></div></div></div>
+        <div className="programme-form-group"><h4>Timing and safety</h4><div className="duration-grid">
+          {field('on', 'Pump on', '1–3,600 seconds')}
+          {field('off', 'Pump off', '1–86,400 seconds')}
+          {field('max', 'Max continuous on', '1–3,600 seconds, at least pump-on time')}
+        </div></div>
+        <div className="protection-note"><Icon name="check" size={17} /><strong>Reservoir protection is always on</strong></div>
         {!review
           ? <button className="primary" disabled={!!blocked} onClick={() => { setTouched({ on: true, off: true, max: true }); if (!Object.keys(errs).length) setReview(true) }}>Review change</button>
           : (

@@ -66,7 +66,7 @@ export function UnitPage() {
 
       <div className="unit-section-heading"><h2>Current readings</h2>{r && <span className="muted small">Taken {ago(r.effective_at_utc)}{r.outdated && <b className="danger-text"> · OUTDATED</b>}</span>}</div>
       {!r ? <Empty>No readings have been stored for this unit yet.</Empty> : (
-        <>
+        <div className="unit-readings-panel">
           <p className="muted small reading-time">{clock(r.effective_at_utc)} · {r.time_quality === 'DEVICE_CLOCK' ? 'Controller clock' : r.time_quality === 'ESTIMATED_FROM_UPTIME' ? 'Time estimated from controller uptime' : 'Time recorded when the Pi received it'}</p>
           <div className="unit-reading-grid">{Object.entries(r.readings).sort(([a], [b]) => (READING_ORDER.indexOf(a) < 0 ? 99 : READING_ORDER.indexOf(a)) - (READING_ORDER.indexOf(b) < 0 ? 99 : READING_ORDER.indexOf(b))).map(([k, v]) => {
             const rg = ranges?.[k]
@@ -75,7 +75,7 @@ export function UnitPage() {
               {v.quality !== 'valid' && <small>{v.quality}</small>}
               {rg && <small className="crop-range">{out && <b>outside crop range · </b>}{rg.min !== undefined && rg.max !== undefined ? `range ${rg.min}–${rg.max}` : rg.max !== undefined ? `max ${rg.max}` : `min ${rg.min}`}</small>}</div>
           })}</div>
-        </>)}
+        </div>)}
       </>}
 
       {tab === 'history' && <>
@@ -85,7 +85,7 @@ export function UnitPage() {
       {hist.data && (hist.data.points.length === 0
         ? <Empty>No stored readings in this period.</Empty>
         : <>
-            <div className="history-legend"><span>{hist.data.points.length} points · {hist.data.resolution}</span><span>Each sensor has its own scale</span><span><i className="legend-gap" /> No data</span><span><i className="legend-invalid" /> Invalid or missing</span>{hist.data.truncated && <span>Showing the first part only</span>}{hist.data.contains_simulated_data && <span>SIMULATED data</span>}</div>
+            <div className="history-legend"><span>Each sensor has its own scale</span>{hist.data.gaps.length > 0 && <span><i className="legend-gap" /> No data</span>}<span><i className="legend-invalid" /> Invalid or missing</span>{hist.data.truncated && <span>Showing the first part only</span>}{hist.data.contains_simulated_data && <span>SIMULATED data</span>}</div>
             <HistoryCompare history={hist.data} />
           </>)}
       </>}
