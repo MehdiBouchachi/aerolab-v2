@@ -4,6 +4,7 @@ import { ApiError } from '../api/client'
 import { IS_CLOUD } from '../api/paths'
 import { Signup } from './Signup'
 import { useTheme } from '../app/theme'
+import { FullLogo } from '../components/Logo'
 
 export function Login() {
   const { theme, toggle } = useTheme()
@@ -25,7 +26,7 @@ export function Login() {
     <div className="login">
       <button className="theme-toggle login-theme" type="button" onClick={toggle} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>{theme === 'dark' ? '☀ Light' : '☾ Dark'}</button>
       <form onSubmit={submit} noValidate aria-labelledby="t">
-        <h1 id="t">AeroLab</h1>
+        <h1 id="t"><FullLogo /><span className="sr-only">AeroLab</span></h1>
         <p className="muted">{IS_CLOUD ? <>Sign in to see all your farms. New here? <button type="button" className="link" onClick={() => setSignup(true)}>Create an account</button></> : 'Sign in to this site. This works without internet.'}</p>
         <label>{IS_CLOUD ? 'Email' : 'Username'}<input value={u} onChange={e => setU(e.target.value)} onBlur={() => setTouched(t => ({ ...t, u: true }))} autoComplete="username" autoFocus aria-invalid={touched.u && !u} /></label>
         {touched.u && !u && <span className="field-error">{IS_CLOUD ? 'Enter your email address.' : 'Enter your username.'}</span>}

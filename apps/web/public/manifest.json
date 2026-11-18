@@ -6,11 +6,13 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f8fafc",
-  "theme_color": "#ffffff",
+  "background_color": "#071B16",
+  "theme_color": "#071B16",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+    { "src": "/icons/aerolab-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/aerolab-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/aerolab-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/aerolab-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
   ]
 }

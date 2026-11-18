@@ -2,7 +2,8 @@
 // one scrubber that selects the same recorded moment in every row. Lines never cross a missing-data gap and
 // invalid/missing readings are marked, never plotted as numbers.
 import { useMemo, useRef, useState } from 'react'
-import { PanResponder, Text, View, type LayoutChangeEvent } from 'react-native'
+import { PanResponder, View, type LayoutChangeEvent } from 'react-native'
+import { Text } from './fonts'
 import Svg, { Circle, Line, Polyline, Rect } from 'react-native-svg'
 import { label, scaleOf, segments, seriesOf, showReading, type History, type HistoryPoint } from './format'
 import { useTheme } from './theme'
