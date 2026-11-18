@@ -5,6 +5,7 @@ import type { Summary } from '../api/types'
 import { ago } from './format'
 import { Sim } from '../components/ui'
 import { Icon } from '../components/Icon'
+import { BrandLockup } from '../components/Logo'
 import { HOME, IS_CLOUD } from '../api/paths'
 import { useTheme } from './theme'
 
@@ -17,7 +18,7 @@ export function Shell() {
   return <div className="shell">
     <header className="top">
       {location.pathname.startsWith('/units/') && <Link className="top-back" to={HOME} aria-label="Back to overview"><Icon name="back" size={22} /></Link>}
-      <div className="brand">AeroLab</div>
+      <BrandLockup />
       <details key={location.pathname + location.search} className="mobile-account" onClick={e => { if (e.target === e.currentTarget) e.currentTarget.open = false }} onKeyDown={e => { if (e.key === 'Escape') { e.currentTarget.open = false; e.currentTarget.querySelector('summary')?.focus() } }}>
         <summary aria-label="Account menu"><Icon name="admin" size={18} /><span>Account</span></summary>
         <div className="mobile-account-panel" role="group" aria-label="Account">

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useApp } from '../app/context'
 import { ApiError } from '../api/client'
 import type { OrgKind } from '../api/types'
+import { FullLogo } from '../components/Logo'
 
 const KINDS: { k: OrgKind; title: string; hint: string }[] = [
   { k: 'PERSONAL', title: 'For myself', hint: 'A home or hobby setup' },
@@ -28,6 +29,7 @@ export function Signup({ back }: { back: () => void }) {
   return (
     <div className="login">
       <form onSubmit={submit} noValidate aria-labelledby="st">
+        <FullLogo />
         <h1 id="st">Create an AeroLab account</h1>
         <fieldset><legend className="small">Who is this account for?</legend>
           {KINDS.map(x => <label key={x.k} style={{ flexDirection: 'row', gap: '.5rem', alignItems: 'center' }}>
