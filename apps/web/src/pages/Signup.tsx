@@ -1,3 +1,4 @@
+import { Tr } from '../app/language'
 import { useState, type FormEvent } from 'react'
 import { useApp } from '../app/context'
 import { ApiError } from '../api/client'
@@ -37,7 +38,7 @@ export function Signup({ back }: { back: () => void }) {
         </fieldset>
         {f.kind !== 'PERSONAL' && <label>Organisation name<input value={f.org} onChange={e => setF({ ...f, org: e.target.value })} aria-invalid={touched && errs.org} /></label>}
         {touched && errs.org && <span className="field-error">Enter the organisation's name.</span>}
-        <label>Email<input type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} autoComplete="email" aria-invalid={touched && errs.email} /></label>
+        <label><Tr>Email</Tr><input type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} autoComplete="email" aria-invalid={touched && errs.email} /></label>
         {touched && errs.email && <span className="field-error">Enter your email address.</span>}
         <label>Password (12+ characters)<input type="password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} autoComplete="new-password" aria-invalid={touched && errs.password} /></label>
         {touched && errs.password && <span className="field-error">Use at least 12 characters.</span>}

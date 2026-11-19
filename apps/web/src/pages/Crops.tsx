@@ -1,3 +1,4 @@
+import { Tr, useTranslation } from '../app/language'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { api, ApiError } from '../api/client'
 import { useApp } from '../app/context'
@@ -107,7 +108,7 @@ function Editor({ initial, onDone, onCancel }: { initial: CropProfile | null; on
   return (
     <dialog ref={dialogRef} className="app-modal-dialog" aria-label={initial ? `Edit ${initial.name}` : 'New crop profile'} onCancel={event => { event.preventDefault(); if (!busy) onCancel() }}>
     <form className="app-modal-form" onSubmit={save} noValidate>
-      <header className="app-modal-header"><h2>{initial ? `Edit “${initial.name}”` : 'New crop profile'}</h2></header>
+      <header className="app-modal-header"><h2>{initial ? `Edit “${initial.name}”` : <Tr>{"New crop profile"}</Tr>}</h2></header>
       <div className="app-modal-body">
       <ErrorNote error={err} />
       {err?.code === 'VERSION_CONFLICT' && <p className="note warn">Someone saved this profile after you opened it. Close the editor and open it again to see their changes.</p>}
@@ -120,7 +121,7 @@ function Editor({ initial, onDone, onCancel }: { initial: CropProfile | null; on
       {field('value_source', 'Range source', { maxLength: 200, placeholder: 'Agronomist, supplier, or trial' })}
       </section>
       <section className="crop-editor-section" aria-labelledby="crop-ranges-title">
-      <h3 id="crop-ranges-title">Sensor ranges</h3>
+      <h3 id="crop-ranges-title"><Tr>Sensor ranges</Tr></h3>
       <p className="muted small crop-range-help">Ranges trigger alerts only.</p>
       {f.rows.length > 0 && <ul className="crop-sensor-list">
         {f.rows.map((row, i) => {
@@ -128,9 +129,9 @@ function Editor({ initial, onDone, onCancel }: { initial: CropProfile | null; on
           return (
             <li className="crop-sensor-row" key={row.key}>
               <strong>{label(row.key)}</strong>
-              <label>Min<input inputMode="decimal" aria-label={`Minimum ${label(row.key)}`} aria-invalid={touched && !!errs[errorId]} aria-describedby={touched && errs[errorId] ? `err-${errorId}` : undefined} value={row.min} onChange={e => setRange(row.key, 'min', e.target.value)} /></label>
-              <label>Max<input inputMode="decimal" aria-label={`Maximum ${label(row.key)}`} aria-invalid={touched && !!errs[errorId]} aria-describedby={touched && errs[errorId] ? `err-${errorId}` : undefined} value={row.max} onChange={e => setRange(row.key, 'max', e.target.value)} /></label>
-              <button type="button" className="crop-remove-sensor" aria-label={`Remove ${label(row.key)}`} onClick={() => removeSensor(row.key)}>Remove</button>
+              <label><Tr>Min</Tr><input inputMode="decimal" aria-label={`Minimum ${label(row.key)}`} aria-invalid={touched && !!errs[errorId]} aria-describedby={touched && errs[errorId] ? `err-${errorId}` : undefined} value={row.min} onChange={e => setRange(row.key, 'min', e.target.value)} /></label>
+              <label><Tr>Max</Tr><input inputMode="decimal" aria-label={`Maximum ${label(row.key)}`} aria-invalid={touched && !!errs[errorId]} aria-describedby={touched && errs[errorId] ? `err-${errorId}` : undefined} value={row.max} onChange={e => setRange(row.key, 'max', e.target.value)} /></label>
+              <button type="button" className="crop-remove-sensor" aria-label={`Remove ${label(row.key)}`} onClick={() => removeSensor(row.key)}><Tr>Remove</Tr></button>
               {show(errorId)}
             </li>
           )
@@ -143,7 +144,7 @@ function Editor({ initial, onDone, onCancel }: { initial: CropProfile | null; on
       </section>
       <section className="crop-editor-section" aria-label="Optional settings">
       <label className="crop-program-toggle">
-        <input type="checkbox" checked={f.withProgram} onChange={e => setF({ ...f, withProgram: e.target.checked })} /> Include irrigation programme
+        <input type="checkbox" checked={f.withProgram} onChange={e => setF({ ...f, withProgram: e.target.checked })} /> <Tr>Include irrigation programme</Tr>
       </label>
       {f.withProgram && (<div className="grid3">
         {progField('on', 'Pump on (s)')}
@@ -152,14 +153,14 @@ function Editor({ initial, onDone, onCancel }: { initial: CropProfile | null; on
         <p className="muted small crop-program-help">Apply from the unit page. Controller limits and reservoir protection still apply.</p>
       </div>)}
       <details className="crop-editor-notes">
-        <summary>Notes (optional)</summary>
+        <summary><Tr>Notes (optional)</Tr></summary>
         <textarea aria-label="Notes" rows={3} value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} />
       </details>
       </section>
       </div>
       <div className="app-modal-footer">
-        <button type="button" onClick={onCancel} disabled={busy}>Cancel</button>
-        <button className="primary" disabled={busy}>{busy ? 'Saving…' : initial ? 'Save changes' : 'Create profile'}</button>
+        <button type="button" onClick={onCancel} disabled={busy}><Tr>Cancel</Tr></button>
+        <button className="primary" disabled={busy}>{busy ? 'Saving…' : initial ? <Tr>{"Save changes"}</Tr> : <Tr>{"Create profile"}</Tr>}</button>
       </div>
     </form>
     </dialog>
@@ -167,6 +168,7 @@ function Editor({ initial, onDone, onCancel }: { initial: CropProfile | null; on
 }
 
 export function Crops() {
+  const t = useTranslation()
   const { session, can } = useApp(); const site = session!.site!.id
   const list = useFetch<{ items: CropProfile[] }>(P.site(site, `/api/v1/sites/${site}/crop-profiles`), ['crop_profile.updated', 'unit.updated'])
   const [editing, setEditing] = useState<CropProfile | 'new' | null>(null)
@@ -188,10 +190,10 @@ export function Crops() {
     <>
       <header className="crop-heading">
         <div>
-          <h1>Crop profiles</h1>
-          <p className="muted">Manage sensor ranges and irrigation programmes for your crops.</p>
+          <h1><Tr>Crop profiles</Tr></h1>
+          <p className="muted"><Tr>Manage sensor ranges and irrigation programmes for your crops.</Tr></p>
         </div>
-        {edit && <button className="primary" onClick={() => setEditing('new')}>New crop profile</button>}
+        {edit && <button className="primary" onClick={() => setEditing('new')}><Tr>New crop profile</Tr></button>}
       </header>
       <ErrorNote error={list.error} retry={list.reload} />
       {archiving && <ConfirmDialog title={`Archive ${archiving.name}?`} description="Units keep their history." confirmLabel="Archive profile" onConfirm={() => archive(archiving)} onClose={() => setArchiving(null)} />}
@@ -200,34 +202,34 @@ export function Crops() {
       {list.data && list.data.items.length === 0 && !editing && <Empty>No crop profiles yet.{edit ? ' Create one with the numbers for what you grow.' : ' An administrator can create them.'}</Empty>}
       {items.length > 0 && <section className="crop-directory" aria-label="Crop profile directory">
         <div className="crop-toolbar">
-          <input aria-label="Search by profile name, crop, or variety" type="search" value={query} onChange={e => { setQuery(e.target.value); setPage(1) }} placeholder="Search crop profiles" />
-          {query && <button onClick={e => { setQuery(''); setPage(1); (e.currentTarget.previousElementSibling as HTMLInputElement | null)?.focus() }}>Clear search</button>}
+          <input aria-label={t('Search crop profiles')} type="search" value={query} onChange={e => { setQuery(e.target.value); setPage(1) }} placeholder={t('Search crop profiles')} />
+          {query && <button onClick={e => { setQuery(''); setPage(1); (e.currentTarget.previousElementSibling as HTMLInputElement | null)?.focus() }}><Tr>Clear search</Tr></button>}
         </div>
         {matches.length === 0 ? <Empty>No profiles match your search.</Empty> : <>
           <div className="table-wrap crop-table-wrap" tabIndex={0} role="region" aria-label="Crop profiles table">
             <table className="crop-table">
-              <thead><tr><th scope="col">Profile</th><th scope="col">Crop</th><th scope="col">Units</th><th scope="col">Details</th>{edit && <th scope="col">Actions</th>}</tr></thead>
+              <thead><tr><th scope="col"><Tr>Profile</Tr></th><th scope="col"><Tr>Crop</Tr></th><th scope="col"><Tr>Units</Tr></th><th scope="col"><Tr>Details</Tr></th>{edit && <th scope="col"><Tr>Actions</Tr></th>}</tr></thead>
               <tbody>{matches.slice(start, start + pageSize).map(p => (
                 <tr key={p.id}>
                   <th scope="row">{p.name}<small className="muted">Version {p.version}</small></th>
                   <td>{p.crop}{p.variety && <small className="muted">{p.variety}</small>}</td>
                   <td>{p.unit_count}</td>
                   <td><details>
-                    <summary aria-label={`Ranges and programme for ${p.name}`}>Ranges and programme</summary>
-                    <dl>{Object.entries(p.thresholds).map(([k, r]) => <div className="row" key={k}><dt>{label(k)}</dt><dd>{r.min ?? '–'} to {r.max ?? '–'}</dd></div>)}
-                      <div className="row"><dt>Programme</dt><dd>{p.program ? `on ${p.program.on_duration_seconds} s / off ${p.program.off_duration_seconds} s` : 'None'}</dd></div>
+                    <summary aria-label={`Ranges and programme for ${p.name}`}><Tr>Ranges and programme</Tr></summary>
+                    <dl>{Object.entries(p.thresholds).map(([k, r]) => <div className="row" key={k}><dt><Tr>{label(k)}</Tr></dt><dd>{r.min ?? '–'} to {r.max ?? '–'}</dd></div>)}
+                      <div className="row"><dt><Tr>Programme</Tr></dt><dd>{p.program ? `on ${p.program.on_duration_seconds} s / off ${p.program.off_duration_seconds} s` : <Tr>{"None"}</Tr>}</dd></div>
                     </dl>
                     {Object.keys(p.thresholds).length === 0 && <p className="muted">No ranges set. Units with this profile have no range alerts.</p>}
                     <p className="muted">Numbers from: {p.value_source}</p>
                   </details></td>
-                  {edit && <td><div className="crop-actions"><button aria-label={`Edit ${p.name}`} onClick={() => setEditing(p)}>Edit</button>{p.unit_count === 0 && <button aria-label={`Archive ${p.name}`} onClick={() => setArchiving(p)}>Archive</button>}</div></td>}
+                  {edit && <td><div className="crop-actions"><button aria-label={`Edit ${p.name}`} onClick={() => setEditing(p)}><Tr>Edit</Tr></button>{p.unit_count === 0 && <button aria-label={`Archive ${p.name}`} onClick={() => setArchiving(p)}><Tr>Archive</Tr></button>}</div></td>}
                 </tr>
               ))}</tbody>
             </table>
           </div>
           <div className="crop-pagination">
             <span className="muted" role="status">{pages > 1 ? `${start + 1}–${Math.min(start + pageSize, matches.length)} of ${matches.length} profiles` : `${matches.length} ${matches.length === 1 ? 'profile' : 'profiles'}`}</span>
-            {pages > 1 && <div className="crop-actions"><button disabled={current === 1} onClick={() => setPage(current - 1)}>Previous</button><button disabled={current === pages} onClick={() => setPage(current + 1)}>Next</button></div>}
+            {pages > 1 && <div className="crop-actions"><button disabled={current === 1} onClick={() => setPage(current - 1)}><Tr>Previous</Tr></button><button disabled={current === pages} onClick={() => setPage(current + 1)}><Tr>Next</Tr></button></div>}
           </div>
         </>}
       </section>}

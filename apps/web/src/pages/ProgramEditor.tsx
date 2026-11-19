@@ -1,3 +1,4 @@
+import { Tr } from '../app/language'
 import { useEffect, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import type { Command, Program, Unit } from '../api/types'
@@ -74,7 +75,7 @@ export function ProgramEditor({ unit, pending, onChanged }: { unit: Unit; pendin
   return (
     <section className="programme-editor" aria-label="Programme editor">
       <header className="programme-editor-heading">
-        <h3>{IS_CLOUD ? 'Request new timing' : 'Set irrigation timing'}</h3>
+        <h3>{IS_CLOUD ? <Tr>{"Request new timing"}</Tr> : 'Set irrigation timing'}</h3>
         <div className="programme-context"><span>Current version <b>{applied || 'none'}</b></span><span>Proposed version <b>{applied + 1}</b></span></div>
       </header>
       <p className="programme-guidance muted small">Use timing approved for your crop. Changes take effect after the controller confirms them.</p>
@@ -87,18 +88,18 @@ export function ProgramEditor({ unit, pending, onChanged }: { unit: Unit; pendin
         </div>)}
       {err && <div className="note error" role="alert">{err.code === 'PROGRAM_VERSION_CONFLICT' ? `The controller already runs version ${String(err.details.actual_version)}. Review the current programme and try again.` : err.message}</div>}
       <fieldset disabled={inflight || busy}>
-        <div className="programme-form-group"><h4>Timing and safety</h4><div className="duration-grid">
+        <div className="programme-form-group"><h4><Tr>Timing and safety</Tr></h4><div className="duration-grid">
           {field('on', 'Pump on', '1–3,600 seconds')}
           {field('off', 'Pump off', '1–86,400 seconds')}
           {field('max', 'Max continuous on', '1–3,600 seconds, at least pump-on time')}
         </div></div>
         <div className="protection-note"><Icon name="check" size={17} /><strong>Reservoir protection is always on</strong></div>
         {!review
-          ? <button className="primary" disabled={!!blocked} onClick={() => { setTouched({ on: true, off: true, max: true }); if (!Object.keys(errs).length) setReview(true) }}>Review change</button>
+          ? <button className="primary" disabled={!!blocked} onClick={() => { setTouched({ on: true, off: true, max: true }); if (!Object.keys(errs).length) setReview(true) }}><Tr>Review change</Tr></button>
           : (
             <div className="review">
               <b>Confirm:</b> pump runs {draft.on} s every {Number(draft.on) + Number(draft.off)} s (off {draft.off} s), never longer than {draft.max} s at a time, on <b>{unit.name}</b> only.
-              <div><button className="primary" onClick={() => void send()} disabled={busy}>{busy ? 'Sending…' : 'Send to controller'}</button> <button className="secondary" onClick={() => setReview(false)}>Edit</button></div>
+              <div><button className="primary" onClick={() => void send()} disabled={busy}>{busy ? 'Sending…' : <Tr>{"Send to controller"}</Tr>}</button> <button className="secondary" onClick={() => setReview(false)}><Tr>Edit</Tr></button></div>
             </div>)}
         {blocked && <p className="field-error">{blocked}</p>}
       </fieldset>

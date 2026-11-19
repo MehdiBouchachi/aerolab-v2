@@ -1,3 +1,4 @@
+import { Tr } from '../app/language'
 import { useEffect, useId, useRef, useState } from 'react'
 import { ApiError } from '../api/client'
 import { ErrorNote } from './ui'
@@ -42,7 +43,7 @@ export function ConfirmDialog({ title, description, confirmLabel, onConfirm, onC
         <ErrorNote error={error} />
       </div>
       <footer className="app-modal-footer">
-        <button type="button" autoFocus disabled={busy} onClick={onClose}>Cancel</button>
+        <button type="button" autoFocus disabled={busy} onClick={onClose}><Tr>Cancel</Tr></button>
         <button type="button" className="danger" disabled={busy} onClick={() => void confirm()}>{busy ? 'Working…' : confirmLabel}</button>
       </footer>
     </div>

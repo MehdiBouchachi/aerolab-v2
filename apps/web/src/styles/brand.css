@@ -102,6 +102,15 @@ body, input, select, textarea, button { font-family: var(--font-ui); }
 textarea.mono, .admin-pair-code textarea { font-family: ui-monospace, monospace; }
 h1, h2, h3, .page-heading h1, .section-heading h2 { font-family: var(--font-heading); letter-spacing: -.02em; }
 h1 { font-weight: 650; }
+:root[lang=ar-DZ] { --font-heading: system-ui, "Segoe UI", Tahoma, sans-serif; --font-ui: system-ui, "Segoe UI", Tahoma, sans-serif; }
+:root[dir=rtl] :is(h1, h2, h3, .page-heading h1) { letter-spacing: normal; }
+:root[dir=rtl] .shell > .top { border-right: 0; border-inline-end: 1px solid var(--line); }
+:root[dir=rtl] :is(.admin-table, .crop-table, .readings, .who .link) { text-align: start; }
+:root[dir=rtl] :is(input[type=email], input[type=url], input[type=password], .pairing-text) { direction: ltr; }
+:root[dir=rtl] :is(.top-back, .card-link svg) { scale: -1 1; }
+.language-toggle { align-self: flex-start; min-height: 36px; padding: .3rem .7rem; font-size: .82rem; }
+.login > .language-toggle { position: absolute; inset-block-start: 1rem; inset-inline-start: 1rem; }
+.login > .login-theme { right: auto; inset-inline-end: 1rem; }
 h2, h3 { font-weight: 600; }
 .overview-page .tile b { font-family: var(--font-heading); font-weight: 650; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 

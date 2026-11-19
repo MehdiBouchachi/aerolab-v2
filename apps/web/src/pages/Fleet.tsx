@@ -1,3 +1,4 @@
+import { Tr } from '../app/language'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
@@ -19,8 +20,8 @@ function SiteCard({ s, open }: { s: FleetSite; open: () => void }) {
       <dl>
         <div className="fleet-metric"><dt>Units reporting</dt><dd>{s.units_online} of {s.units_total}{s.stale && <span className="fleet-secondary">Last known</span>}</dd></div>
         <div className="fleet-metric"><dt>Units needing attention</dt><dd>{s.units_attention}</dd></div>
-        <div><dt>Alerts</dt><dd>{crit ? <b>{crit} critical</b> : '0 critical'} · {warn} warning</dd></div>
-        <div><dt>Crop profiles</dt><dd>{s.crops.length ? s.crops.map(c => `${c.crop} (${c.units})`).join(', ') : 'None assigned'}{s.units_without_crop > 0 && <span className="fleet-secondary">{s.units_without_crop} units without a crop profile</span>}</dd></div>
+        <div><dt><Tr>Alerts</Tr></dt><dd>{crit ? <b>{crit} critical</b> : '0 critical'} · {warn} warning</dd></div>
+        <div><dt><Tr>Crop profiles</Tr></dt><dd>{s.crops.length ? s.crops.map(c => `${c.crop} (${c.units})`).join(', ') : 'None assigned'}{s.units_without_crop > 0 && <span className="fleet-secondary">{s.units_without_crop} units without a crop profile</span>}</dd></div>
       </dl>
       <button className="fleet-open" onClick={open}>Open {s.name}</button>
     </article>
@@ -38,7 +39,7 @@ function ConnectPi({ org }: { org: Org }) {
         <p>Connection code: <b style={{ fontSize: '1.4rem', letterSpacing: '.08em' }}>{code.code}</b></p>
         <p className="muted small">Valid until {new Date(code.expires_at).toLocaleString()} and works once. On the Pi's local dashboard open <b>Administration → Connect to cloud</b>, enter <b>{window.location.origin}</b> and this code. The Pi keeps working on its own whether or not it is connected.</p>
         {/^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname) && <p className="muted small">This cloud is on your own computer, and “localhost” on the Pi means the Pi itself. In the Docker demo enter <b>http://cloud:8090</b> instead; otherwise use this computer’s network address.</p>}
-        <button onClick={() => setCode(null)}>Done</button>
+        <button onClick={() => setCode(null)}><Tr>Done</Tr></button>
       </>)}
     </section>
   )
@@ -55,8 +56,8 @@ export function Fleet() {
   const total = fleet.data?.organizations.reduce((n, o) => n + o.sites.length, 0) ?? 0
   return (
     <div className="fleet-page">
-      <div className="fleet-intro"><h1>Your farms</h1>{fleet.data && <p className="fleet-note muted small">{fleet.data.note}</p>}</div>
-      {!session?.site && <p className="muted">Signed in as {session?.user.username}. <button className="link" onClick={() => void signOut()}>Sign out</button></p>}
+      <div className="fleet-intro"><h1><Tr>Your farms</Tr></h1>{fleet.data && <p className="fleet-note muted small">{fleet.data.note}</p>}</div>
+      {!session?.site && <p className="muted">Signed in as {session?.user.username}. <button className="link" onClick={() => void signOut()}><Tr>Sign out</Tr></button></p>}
       <ErrorNote error={fleet.error} retry={fleet.reload} />
       {fleet.loading && <Loading what="your Pis" />}
       {fleet.data && total === 0 && <Empty>No Pi is connected yet.{owned.length ? ' Create a connection code below and enter it on your Pi.' : ' Ask an owner of your organisation to give you access to a Pi.'}</Empty>}

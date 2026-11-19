@@ -1,3 +1,4 @@
+import { Tr } from '../app/language'
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import { useApp } from '../app/context'
@@ -60,20 +61,20 @@ export function UnitSettings({ unit, onChanged, onGone }: { unit: Unit; onChange
 
   return (
     <section className="unit-settings" aria-labelledby="unit-settings-title">
-      <h2 id="unit-settings-title">Unit settings</h2>
+      <h2 id="unit-settings-title"><Tr>Unit settings</Tr></h2>
       <ErrorNote error={err} />
       {msg && <p className="note ok" role="status">{msg}</p>}
       <div className="unit-settings-surface">
         {can('manage_devices') && (
           <form className="unit-setting-row" noValidate onSubmit={e => { e.preventDefault(); if (name.trim() && name.trim() !== unit.name) void run(() => api('PATCH', P.site(site, `/api/v1/units/${unit.id}`), { name: name.trim() }), 'Name saved.') }}>
-            <label htmlFor="unit-settings-name">Unit name</label>
+            <label htmlFor="unit-settings-name"><Tr>Unit name</Tr></label>
             <div className="unit-setting-control">
               <input id="unit-settings-name" value={name} onChange={e => setName(e.target.value)} maxLength={80} />
-              <button disabled={!name.trim() || name.trim() === unit.name}>Save name</button>
+              <button disabled={!name.trim() || name.trim() === unit.name}><Tr>Save name</Tr></button>
             </div>
           </form>)}
         <div className="unit-setting-row">
-          <div><label htmlFor="unit-settings-crop">Crop profile</label><p className="muted small">Sets the sensor ranges used for alerts.</p></div>
+          <div><label htmlFor="unit-settings-crop"><Tr>Crop profile</Tr></label><p className="muted small">Sets the sensor ranges used for alerts.</p></div>
           <div className="unit-setting-crop">
             <select id="unit-settings-crop" value={unit.crop?.profile_id ?? ''} disabled={!can('edit_program') || !crops.data}
               onChange={e => void run(() => api('PUT', P.site(site, `/api/v1/units/${unit.id}/crop-profile`), { crop_profile_id: e.target.value }), e.target.value ? 'Crop profile assigned. Alerts now use its ranges.' : 'Crop profile removed.')}>
@@ -91,15 +92,15 @@ export function UnitSettings({ unit, onChanged, onGone }: { unit: Unit; onChange
 
       {can('manage_devices') && (<>
         <section className="unit-settings-surface unit-setting-row">
-        <div><h3>Controller setup</h3>
+        <div><h3><Tr>Controller setup</Tr></h3>
         <p className="muted small">A new code replaces the controller password. Set up the controller again to reconnect it.</p></div>
-        <button onClick={() => setAction('setup')}>Create a new setup code</button>
+        <button onClick={() => setAction('setup')}><Tr>Create a new setup code</Tr></button>
         {bundle && <div className="unit-setting-expanded"><SetupCode b={bundle} /></div>}
         </section>
 
         <section className="unit-settings-surface unit-setting-row">
-        <div><h3>Retire unit</h3><p className="muted small">Removes the unit from lists and locks out its controller. History is kept.</p></div>
-        <button className="unit-retire-action" onClick={() => setAction('retire')}>Retire unit</button>
+        <div><h3><Tr>Retire unit</Tr></h3><p className="muted small">Removes the unit from lists and locks out its controller. History is kept.</p></div>
+        <button className="unit-retire-action" onClick={() => setAction('retire')}><Tr>Retire unit</Tr></button>
         </section>
         {action && <dialog ref={dialog} className="app-modal-dialog unit-action-dialog"
           aria-labelledby="unit-action-title" aria-describedby="unit-action-description"
@@ -114,7 +115,7 @@ export function UnitSettings({ unit, onChanged, onGone }: { unit: Unit; onChange
               <ErrorNote error={actionError} />
             </div>
             <footer className="app-modal-footer">
-              <button type="button" autoFocus onClick={closeAction} disabled={busy}>Cancel</button>
+              <button type="button" autoFocus onClick={closeAction} disabled={busy}><Tr>Cancel</Tr></button>
               <button className={action === 'setup' ? 'primary' : 'unit-retire-action'} disabled={busy || (action === 'retire' && confirm !== unit.name)}>
                 {action === 'setup' ? (busy ? 'Creating…' : 'Create setup code') : (busy ? 'Retiring…' : 'Confirm retirement')}
               </button>

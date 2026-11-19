@@ -15,6 +15,7 @@ import { Sora_500Medium } from '@expo-google-fonts/sora/500Medium'
 import { Sora_600SemiBold } from '@expo-google-fonts/sora/600SemiBold'
 import { Sora_700Bold } from '@expo-google-fonts/sora/700Bold'
 import { HEADING, resolveFont } from './fontmap'
+import { useLanguage, useTranslation } from './language'
 
 export { HEADING }
 
@@ -32,5 +33,17 @@ function brandStyle(style: TextProps['style']) {
   return file ? [style, { fontFamily: file, fontWeight: undefined }] : style
 }
 
-export function Text(props: TextProps) { return <RNText {...props} style={brandStyle(props.style)} /> }
-export function TextInput(props: TextInputProps) { return <RNTextInput {...props} style={brandStyle(props.style)} /> }
+export function Text({ children, style, accessibilityLabel, ...props }: TextProps) {
+  const t = useTranslation()
+  const { language } = useLanguage()
+  const translateText = (value: unknown) => typeof value === 'string' ? value.replace(value.trim(), t(value.trim())) : value
+  const content = Array.isArray(children) ? children.map(translateText) : typeof children === 'string' ? t(children) : children
+  return <RNText {...props} accessibilityLabel={accessibilityLabel && t(accessibilityLabel)}
+    style={language === 'ar' ? [style, { fontFamily: undefined }] : brandStyle(style)}>{content as TextProps['children']}</RNText>
+}
+export function TextInput({ style, placeholder, accessibilityLabel, ...props }: TextInputProps) {
+  const t = useTranslation()
+  const { language } = useLanguage()
+  return <RNTextInput {...props} placeholder={placeholder && t(placeholder)} accessibilityLabel={accessibilityLabel && t(accessibilityLabel)}
+    style={language === 'ar' ? [style, { fontFamily: undefined }] : brandStyle(style)} />
+}

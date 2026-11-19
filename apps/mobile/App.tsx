@@ -12,12 +12,14 @@ import { useFonts } from 'expo-font'
 import { FONT_ASSETS, setFontsReady } from './src/ui/fonts'
 import { CropProfilesScreen } from './src/ui/SiteTools'
 import { AdministrationScreen } from './src/ui/AdministrationScreen'
+import { LanguageProvider, useLanguage } from './src/ui/language'
 
 // Same structure as the web on phones: top bar, status strip, content, bottom tabs.
 type Pushed = { name: 'unit'; id: string } | { name: 'pair' } | { name: 'login'; cloud?: boolean } | { name: 'admin' }
 
 function Shell() {
   const { c, scheme } = useTheme()
+  const { language } = useLanguage()
   const { pairing, decision } = useApp()
   const p = usePaths()
   const [tab, setTab] = useState<Tab>('overview')
@@ -49,7 +51,7 @@ function Shell() {
   const modal = top?.name === 'pair' || top?.name === 'login'
 
   return <SummaryCtx.Provider value={{ r: sum.r, err: sum.err, reload: sum.reload }}>
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
+    <View style={{ flex: 1, backgroundColor: c.bg, direction: language === 'ar' ? 'rtl' : 'ltr' }}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <TopBar onBack={top ? back : undefined} onAccount={() => go('account')} accountActive={!top && tab === 'account'} />
       {pairing && !modal && <StatusStrip items={statusItems} simulated={d?.contains_simulated_data} />}
@@ -74,5 +76,5 @@ export default function App() {
   const [loaded, error] = useFonts(FONT_ASSETS)
   if (!loaded && !error) return null
   setFontsReady(loaded && !error)
-  return <SafeAreaProvider><ThemeProvider><AppProvider><Shell /></AppProvider></ThemeProvider></SafeAreaProvider>
+  return <SafeAreaProvider><LanguageProvider><ThemeProvider><AppProvider><Shell /></AppProvider></ThemeProvider></LanguageProvider></SafeAreaProvider>
 }

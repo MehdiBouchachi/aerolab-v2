@@ -1,3 +1,4 @@
+import { Tr } from '../app/language'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import QRCode from 'qrcode'
@@ -16,7 +17,7 @@ export function SetupCode({ b }: { b: SetupBundle }) {
   const copy = async () => { try { await navigator.clipboard.writeText(b.setup_code); setCopied(true) } catch { setCopied(false) } }
   return (
     <section className="panel" aria-label="Controller setup code">
-      <h2 style={{ marginTop: 0 }}>Set up the controller</h2>
+      <h2 style={{ marginTop: 0 }}><Tr>Set up the controller</Tr></h2>
       <p className="note warn"><b>Shown once.</b> {b.shown_once}</p>
       {b.warning && <p className="note warn">{b.warning}</p>}
       {b.note && <p className="note">{b.note}</p>}
@@ -26,8 +27,8 @@ export function SetupCode({ b }: { b: SetupBundle }) {
         <li>Enter your farm Wi-Fi name and password, and paste this setup code (or scan the QR code). The controller restarts and appears here within a minute.</li>
       </ol>
       {qr && <img src={qr} width={300} height={300} alt="Controller setup code as a QR code" />}
-      <label>Setup code<textarea readOnly rows={3} value={b.setup_code} onFocus={e => e.currentTarget.select()} /></label>
-      <button type="button" onClick={() => void copy()}>{copied ? 'Copied' : 'Copy setup code'}</button>
+      <label><Tr>Setup code</Tr><textarea readOnly rows={3} value={b.setup_code} onFocus={e => e.currentTarget.select()} /></label>
+      <button type="button" onClick={() => void copy()}>{copied ? 'Copied' : <Tr>{"Copy setup code"}</Tr>}</button>
       <p className="muted small">Controller {b.setup.device_id} · connects to {b.setup.mqtt_uri}. If your controller cannot reach that address, set AEROLAB_BROKER_PUBLIC_URL on the Pi to an address it can reach.</p>
     </section>
   )
@@ -61,14 +62,14 @@ export function AddUnit() {
     <dialog ref={dialog} className={`app-modal-dialog add-unit-dialog${done ? '' : ' unit-action-dialog'}`} aria-labelledby="add-unit-title"
       onCancel={event => { event.preventDefault(); if (!busy) close() }}>
       <form className="app-modal-form" onSubmit={submit} noValidate>
-        <header className="app-modal-header"><h2 id="add-unit-title">{done ? 'Unit added' : 'Add a growing unit'}</h2></header>
+        <header className="app-modal-header"><h2 id="add-unit-title">{done ? <Tr>{"Unit added"}</Tr> : <Tr>{"Add a growing unit"}</Tr>}</h2></header>
         <div className="app-modal-body add-unit-fields">
         {!allowed ? <p>Only an administrator can add units.</p> : done ? <SetupCode b={done} /> : <>
           <ErrorNote error={err} />
           {err?.code === 'BROKER_NOT_MANAGED' && <p className="note warn">This Pi was installed without self-service units. Ask your installer to enable it (AEROLAB_BROKER_PASSWD_FILE).</p>}
-          <label>Unit name<input value={name} onChange={e => setName(e.target.value)} maxLength={80} aria-invalid={touched && !name.trim()} aria-describedby={touched && !name.trim() ? 'add-unit-name-error' : undefined} autoFocus /></label>
+          <label><Tr>Unit name</Tr><input value={name} onChange={e => setName(e.target.value)} maxLength={80} aria-invalid={touched && !name.trim()} aria-describedby={touched && !name.trim() ? 'add-unit-name-error' : undefined} autoFocus /></label>
           {touched && !name.trim() && <span id="add-unit-name-error" className="field-error">Enter a unit name.</span>}
-          <label>Crop profile (optional)
+          <label><Tr>Crop profile (optional)</Tr>
             <select value={crop} onChange={e => setCrop(e.target.value)} disabled={!crops.data}>
               <option value="">Decide later</option>
               {crops.data?.items.map(p => <option key={p.id} value={p.id}>{p.crop} – {p.name}</option>)}
@@ -78,8 +79,8 @@ export function AddUnit() {
         </>}
         </div>
         <footer className="app-modal-footer">
-          <button type="button" onClick={close} disabled={busy}>{done || !allowed ? 'Close' : 'Cancel'}</button>
-          {done ? <Link className="btn" to={`/units/${done.setup.unit_id}`} replace>Open unit</Link> : allowed && <button className="primary" disabled={busy}>{busy ? 'Adding…' : 'Add unit'}</button>}
+          <button type="button" onClick={close} disabled={busy}>{done || !allowed ? <Tr>{"Close"}</Tr> : <Tr>{"Cancel"}</Tr>}</button>
+          {done ? <Link className="btn" to={`/units/${done.setup.unit_id}`} replace><Tr>Open unit</Tr></Link> : allowed && <button className="primary" disabled={busy}>{busy ? 'Adding…' : <Tr>{"Add unit"}</Tr>}</button>}
         </footer>
       </form>
     </dialog>

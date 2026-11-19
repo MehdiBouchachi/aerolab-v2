@@ -4,11 +4,24 @@ import { Login } from './pages/Login'
 import { Chart } from './components/Chart'
 import { HistoryCompare } from './components/HistoryCompare'
 import { ThemeProvider } from './app/theme'
+import { LanguageProvider } from './app/language'
 
 const signIn = vi.fn()
 vi.mock('./app/context', () => ({ useApp: () => ({ signIn }) }))
 
 describe('Login', () => {
+  it('switches the login form to Arabic and persists the direction', () => {
+    const page = render(<LanguageProvider><ThemeProvider><Login /></ThemeProvider></LanguageProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'العربية' }))
+    expect(screen.getByLabelText('اسم المستخدم')).toBeInTheDocument()
+    expect(document.documentElement.dir).toBe('rtl')
+    expect(document.documentElement.lang).toBe('ar-DZ')
+    page.unmount()
+    render(<LanguageProvider><ThemeProvider><Login /></ThemeProvider></LanguageProvider>)
+    expect(screen.getByRole('button', { name: 'تسجيل الدخول' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'English' }))
+    expect(document.documentElement.dir).toBe('ltr')
+  })
   it('validates on blur and does not call the server with empty fields', async () => {
     render(<ThemeProvider><Login /></ThemeProvider>)
     fireEvent.blur(screen.getByLabelText('Username'))

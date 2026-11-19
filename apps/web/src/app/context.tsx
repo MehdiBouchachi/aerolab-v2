@@ -1,3 +1,4 @@
+import { Tr } from './language'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api, hasToken, openEvents, setToken, setUnauthorizedHandler, type SseEvent, type StreamState } from '../api/client'
 import { IS_CLOUD, P } from '../api/paths'
@@ -54,6 +55,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     can: cap => !!session?.capabilities.includes(cap),
   }), [session, stream, lastEventAt, drop])
 
-  if (booting) return <p className="boot">Loading…</p>
+  if (booting) return <p className="boot"><Tr>Loading…</Tr></p>
   return <C.Provider value={value}>{children}</C.Provider>
 }

@@ -17,6 +17,7 @@ import { usePaths, useResource, useSiteCapabilities } from './hooks'
 import { AddUnitModal } from './SiteTools'
 import { Icon } from './Icon'
 import { useTheme } from './theme'
+import { useLanguage } from './language'
 
 export type Go = (to: 'unit' | 'pair' | 'login' | 'alerts' | 'account' | 'admin', arg?: string) => void
 
@@ -332,10 +333,11 @@ function AlertRows({ items, onUnit, onAck, acknowledging }: {
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   const { s } = useTheme()
-  return <View style={{ gap: 8 }}><Text style={[s.small, { fontWeight: '700', letterSpacing: 0.6, marginLeft: 2, marginTop: 6 }]}>{title.toUpperCase()}</Text>{children}</View>
+  return <View style={{ gap: 8 }}><Text style={[s.small, { fontWeight: '700', marginStart: 2, marginTop: 6 }]}>{title}</Text>{children}</View>
 }
 
 export function AccountScreen({ go }: { go: Go }) {
+  const { language, toggle } = useLanguage()
   const { c, s, choice, setChoice } = useTheme()
   const { mode, setMode, pairing, pairings, selectSite, removePairing, setCloudUrl, decision, userId, signOut } = useApp()
   const [cloud, setCloud] = useState(pairing?.cloudUrl ?? '')
@@ -358,7 +360,10 @@ export function AccountScreen({ go }: { go: Go }) {
       <Btn icon="admin" label="Administration" onPress={() => go('admin')} />}
 
     <Group title="Appearance">
-      <Segmented label="Appearance" value={choice} onChange={setChoice} options={[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']]} />
+      <Segmented label="Appearance" value={choice} onChange={setChoice} options={[['system', 'System'], ['light', language === 'ar' ? 'فاتح' : 'Light'], ['dark', 'Dark']]} />
+    </Group>
+    <Group title="Language">
+      <Btn label={language === 'en' ? 'العربية' : 'English'} onPress={toggle} />
     </Group>
 
     <Group title="Connection">

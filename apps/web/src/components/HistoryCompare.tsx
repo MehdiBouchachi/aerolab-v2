@@ -1,3 +1,4 @@
+import { Tr } from '../app/language'
 import { useState } from 'react'
 import type { History, HistoryPoint } from '../api/types'
 import { label, showReading } from '../app/format'
@@ -49,7 +50,7 @@ export function HistoryCompare({ history }: { history: History }) {
   const end = new Date(history.to).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   return <div className="history-compare" aria-label="Sensor history comparison">
     <div className="compare-toolbar">
-      <div><strong>Selected time</strong><span>{selectedLabel}</span>{chosenTime !== null && <button type="button" className="link" onClick={() => setChosenTime(null)}>Jump to latest</button>}</div>
+      <div><strong><Tr>Selected time</Tr></strong><span>{selectedLabel}</span>{chosenTime !== null && <button type="button" className="link" onClick={() => setChosenTime(null)}><Tr>Jump to latest</Tr></button>}</div>
       <input type="range" min={0} max={history.points.length - 1} value={selectedIndex} disabled={history.points.length < 2} onChange={e => setChosenTime(Date.parse(history.points[Number(e.target.value)].t))} aria-label="Compare readings at time" aria-valuetext={selectedLabel}/>
     </div>
     {METRICS.map(name => <MetricRow key={name} history={history} name={name} selected={selected}/>)}

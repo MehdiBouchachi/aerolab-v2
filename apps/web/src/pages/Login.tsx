@@ -1,3 +1,4 @@
+import { LanguageButton, Tr } from '../app/language'
 import { useState, type FormEvent } from 'react'
 import { useApp } from '../app/context'
 import { ApiError } from '../api/client'
@@ -24,16 +25,17 @@ export function Login() {
   }
   return (
     <div className="login">
+      <LanguageButton />
       <button className="theme-toggle login-theme" type="button" onClick={toggle} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>{theme === 'dark' ? '☀ Light' : '☾ Dark'}</button>
       <form onSubmit={submit} noValidate aria-labelledby="t">
         <h1 id="t"><FullLogo /><span className="sr-only">AeroLab</span></h1>
-        <p className="muted">{IS_CLOUD ? <>Sign in to see all your farms. New here? <button type="button" className="link" onClick={() => setSignup(true)}>Create an account</button></> : 'Sign in to this site. This works without internet.'}</p>
-        <label>{IS_CLOUD ? 'Email' : 'Username'}<input value={u} onChange={e => setU(e.target.value)} onBlur={() => setTouched(t => ({ ...t, u: true }))} autoComplete="username" autoFocus aria-invalid={touched.u && !u} /></label>
-        {touched.u && !u && <span className="field-error">{IS_CLOUD ? 'Enter your email address.' : 'Enter your username.'}</span>}
-        <label>Password<input type="password" value={p} onChange={e => setP(e.target.value)} onBlur={() => setTouched(t => ({ ...t, p: true }))} autoComplete="current-password" aria-invalid={touched.p && !p} /></label>
-        {touched.p && !p && <span className="field-error">Enter your password.</span>}
+        <p className="muted">{IS_CLOUD ? <><Tr>Sign in to see all your farms. New here?</Tr>{' '}<button type="button" className="link" onClick={() => setSignup(true)}><Tr>Create an account</Tr></button></> : <Tr>Sign in to this site. This works without internet.</Tr>}</p>
+        <label>{IS_CLOUD ? <Tr>{"Email"}</Tr> : <Tr>{"Username"}</Tr>}<input value={u} onChange={e => setU(e.target.value)} onBlur={() => setTouched(t => ({ ...t, u: true }))} autoComplete="username" autoFocus aria-invalid={touched.u && !u} /></label>
+        {touched.u && !u && <span className="field-error"><Tr>{IS_CLOUD ? 'Enter your email address.' : 'Enter your username.'}</Tr></span>}
+        <label><Tr>Password</Tr><input type="password" value={p} onChange={e => setP(e.target.value)} onBlur={() => setTouched(t => ({ ...t, p: true }))} autoComplete="current-password" aria-invalid={touched.p && !p} /></label>
+        {touched.p && !p && <span className="field-error"><Tr>Enter your password.</Tr></span>}
         {err && <div className="note error" role="alert">{err}</div>}
-        <button className="primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+        <button className="primary" disabled={busy}><Tr>{busy ? 'Signing in…' : 'Sign in'}</Tr></button>
       </form>
     </div>
   )

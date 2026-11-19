@@ -32,13 +32,13 @@ export function Btn({ label, onPress, kind = 'secondary', disabled, icon, style 
   const fg = kind === 'primary' ? c.onBrand : kind === 'danger' ? c.danger : kind === 'link' ? c.brand : c.ink
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
     style={({ pressed }) => [{
-      minHeight: kind === 'link' ? 36 : 48, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: kind === 'link' ? 'flex-start' : 'center', gap: 8, paddingHorizontal: kind === 'link' ? 0 : 16,
+      minHeight: kind === 'link' ? 36 : kind === 'primary' ? 44 : 48, borderRadius: kind === 'primary' ? 8 : 10, flexDirection: 'row', alignItems: 'center', justifyContent: kind === 'link' ? 'flex-start' : 'center', gap: 8, paddingHorizontal: kind === 'link' ? 0 : kind === 'primary' ? 12 : 16,
       backgroundColor: kind === 'primary' ? (pressed ? c.buttonHover : c.buttonFill) : kind === 'link' ? 'transparent' : c.panel,
       borderWidth: kind === 'primary' || kind === 'link' ? 0 : 1, borderColor: c.line,
       opacity: disabled ? 0.55 : pressed ? 0.8 : 1,
     }, style]}>
     {icon && <Icon name={icon} size={18} color={fg} />}
-    <Text style={{ color: fg, fontSize: 14, fontWeight: kind === 'primary' ? '700' : '600' }}>{label}</Text>
+    <Text style={{ color: fg, fontSize: kind === 'primary' ? 13 : 14, fontWeight: '600' }}>{label}</Text>
   </Pressable>
 }
 
@@ -129,19 +129,28 @@ export function StatusStrip({ items, simulated }: { items: { icon: IconName; tex
 }
 
 export type Tab = 'overview' | 'alerts' | 'crops' | 'account'
-/** Bottom tab bar, same three destinations and treatment as the web on phones. */
+/** Phone navigation with a neutral indicator behind the selected icon. */
 export function TabBar({ tab, onTab, alertCount }: { tab: Tab | null; onTab: (t: Tab) => void; alertCount: number }) {
   const { c } = useTheme(); const inset = useSafeAreaInsets()
   const items: [Tab, IconName, string][] = [['overview', 'overview', 'Overview'], ['alerts', 'alerts', 'Alerts'], ['crops', 'beaker', 'Crops'], ['account', 'admin', 'Account']]
-  return <View accessibilityRole="tablist" style={{ flexDirection: 'row', paddingBottom: Math.max(inset.bottom, 6), paddingTop: 4, paddingHorizontal: 6, backgroundColor: c.panel, borderTopWidth: 1, borderTopColor: c.line }}>
+  return <View accessibilityRole="tablist" accessibilityLabel="Main navigation" style={{
+    flexDirection: 'row', paddingBottom: Math.max(inset.bottom, 4), paddingTop: 3,
+    paddingLeft: Math.max(inset.left, 8), paddingRight: Math.max(inset.right, 8),
+    backgroundColor: c.panel, borderTopWidth: 1, borderTopColor: c.line,
+  }}>
     {items.map(([t, icon, l]) => {
       const on = tab === t
       return <Pressable key={t} accessibilityRole="tab" accessibilityLabel={t === 'alerts' && alertCount ? `${l}, ${alertCount} active` : l} accessibilityState={{ selected: on }} onPress={() => onTab(t)}
-        style={({ pressed }) => ({ flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center', gap: 2, opacity: pressed ? 0.7 : 1 })}>
-        <View style={{ minWidth: 48, paddingVertical: 3, alignItems: 'center', borderRadius: 999, backgroundColor: on ? c.segActive : 'transparent' }}><Icon name={icon} size={22} color={on ? c.ink : c.muted} />
-          {t === 'alerts' && alertCount > 0 && <View style={{ position: 'absolute', top: -4, left: 14, minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4, backgroundColor: c.attentionSoft, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 10, fontWeight: '800', color: c.attention }}>{alertCount}</Text></View>}
-        </View>
-        <Text style={{ fontSize: 11, fontWeight: on ? '700' : '500', color: on ? c.ink : c.muted }}>{l}</Text>
+        style={{ flex: 1, minWidth: 0, minHeight: 50, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 3 }}>
+        {({ pressed }) => <>
+          <View style={{ width: 54, height: 27, alignItems: 'center', justifyContent: 'center', borderRadius: 999, backgroundColor: on || pressed ? c.segActive : 'transparent' }}>
+            <Icon name={icon} size={19} color={on ? c.ink : c.muted} />
+            {t === 'alerts' && alertCount > 0 && <View style={{ position: 'absolute', top: 0, left: 36, minWidth: 15, minHeight: 15, borderRadius: 999, paddingHorizontal: 3, backgroundColor: c.attentionSoft, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 9, fontWeight: '700', color: c.attention }}>{alertCount > 99 ? '99+' : alertCount}</Text>
+            </View>}
+          </View>
+          <Text style={{ fontSize: 10.5, textAlign: 'center', fontWeight: on ? '700' : '500', color: on ? c.ink : c.muted }}>{l}</Text>
+        </>}
       </Pressable>
     })}
   </View>

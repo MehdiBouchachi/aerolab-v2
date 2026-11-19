@@ -90,7 +90,7 @@ describe('crop profile form (client hints only; the Pi re-validates)', () => {
     expect(validateForm({ ...base, rows: [{ key: 'ph', min: '2', max: '1' }] }).row0).toMatch(/below/)
     expect(validateForm({ ...base, rows: [{ key: 'ph', min: '', max: '' }] }).row0).toMatch(/minimum/)
     expect(validateForm({ ...base, rows: [{ key: 'ph', min: 'x', max: '' }] }).row0).toMatch(/Numbers/)
-    expect(validateForm({ ...base, rows: [{ key: 'ph', min: '1', max: '' }, { key: 'ph', min: '', max: '3' }] }).row1).toMatch(/twice/)
+    expect(validateForm({ ...base, rows: [{ key: 'ph', min: '1', max: '' }, { key: 'ph', min: '', max: '3' }] }).row1).toBe('This sensor is already listed.')
     expect(validateForm({ ...base, rows: [{ key: 'ph', min: '', max: '3' }] })).toEqual({})
   })
   it('validates an included programme like the programme editor', () => {

@@ -1,6 +1,7 @@
 // Same outline icon set as apps/web/src/components/Icon.tsx (24px grid, 1.8 stroke).
 import type { ReactNode } from 'react'
 import Svg, { Circle, Path, Rect } from 'react-native-svg'
+import { useLanguage } from './language'
 
 export type IconName = 'overview' | 'alerts' | 'admin' | 'sun' | 'moon' | 'activity' | 'wifi' | 'clock' | 'warning' | 'critical' | 'arrow' | 'check' | 'back' | 'chevron' | 'cloud' | 'qr' | 'settings' | 'beaker'
 
@@ -26,8 +27,10 @@ const paths: Record<IconName, ReactNode> = {
 }
 
 export function Icon({ name, size = 18, color }: { name: IconName; size?: number; color: string }) {
+  const { language } = useLanguage()
+  const mirror = language === 'ar' && (name === 'back' || name === 'arrow' || name === 'chevron')
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} color={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} color={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={mirror ? { transform: [{ scaleX: -1 }] } : undefined}>
       {paths[name]}
     </Svg>
   )
